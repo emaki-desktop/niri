@@ -16,6 +16,19 @@ output "eDP-1" {
 }
 ```
 
+Or only while something on the output is HDR, to save what HDR mode costs the rest of the
+time (a 41 MB half-float composition, an encode pass on every change, and no cursor or
+fullscreen planes):
+
+```kdl
+output "eDP-1" {
+    hdr-auto
+    sdr-brightness 300
+}
+```
+
+`hdr` wins when both are set. See [Automatic HDR](#automatic-hdr-hdr-auto) for how it decides.
+
 Or at once, until the config is read again:
 
 ```sh
@@ -132,6 +145,33 @@ Where a render is going rides on the renderer's EGL context (`render_helpers/col
 Converted surfaces aren't scanned out. Windows drawn offscreen (open, close and resize
 animations, opacity) get half-float buffers while their output is in HDR, so their highlights
 survive.
+
+### Automatic HDR: `hdr-auto`
+
+An `hdr-auto` output stays in SDR until a surface it draws is brighter than SDR white: one whose
+description's content peak is over its reference white (PQ, scRGB, or a power curve whose
+`max` luminance is over its reference). `render_helpers/surface.rs` notes such a surface while
+the output's elements are gathered (`hdr::note_bright`), and `tty/hdr.rs` (`follow_content`)
+reads the note after each render:
+
+```mermaid
+stateDiagram-v2
+    SDR --> SDR: no bright surface
+    SDR --> HDR: a bright surface drawn for 1 s
+    HDR --> HDR: a bright surface drawn
+    HDR --> SDR: none drawn for 10 s
+```
+
+The delays keep a thumbnail scrolled past, a pause or a seek from blanking the screen twice:
+switching is the same reconnect as `hdr` changing in the config (`hdr::wanted` is what
+`decide` and `needs_reconnect` ask). A paused video or an idle screen draws nothing, so a
+calloop timer looks again when a delay runs out. The state is kept by connector name, so it
+outlives the reconnect.
+
+In SDR mode surfaces are told the output is sRGB, so a client that tone-maps to the output's
+preferred description, and only sends HDR once the output says it shows HDR, never switches an
+`hdr-auto` output on. Which players and games describe their content as it is, and so do, is
+still to be checked on this machine.
 
 ### Limits
 

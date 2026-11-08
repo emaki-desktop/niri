@@ -29,6 +29,24 @@ use super::renderer::{AsGlesFrame as _, AsGlesRenderer as _};
 use super::shaders::Shaders;
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
 
+std::thread_local! {
+    /// Whether the output being rendered drew a surface brighter than SDR white (`hdr-auto`).
+    static BRIGHT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Notes a surface whose content goes past SDR white (its description's peak over its reference
+/// white), while an output's elements are gathered.
+pub fn note_bright(content_peak: f32) {
+    if content_peak > 1.01 {
+        BRIGHT.set(true);
+    }
+}
+
+/// Whether the elements gathered since the last call held a surface brighter than SDR white.
+pub fn take_bright() -> bool {
+    BRIGHT.replace(false)
+}
+
 /// How an output in HDR mode shows its SDR composition.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HdrParams {

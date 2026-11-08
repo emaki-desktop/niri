@@ -1312,7 +1312,7 @@ impl Tty {
 
         let on_primary = device.render_node == Some(self.primary_render_node);
         let (mut hdr, hdr_caps) = hdr::decide(
-            config.hdr,
+            hdr::wanted(&config, &connector_name),
             &device.drm,
             connector.handle(),
             on_primary,
@@ -1940,6 +1940,9 @@ impl Tty {
             xray: None,
         };
         let mut elements = niri.render_to_vec(ctx, output, true);
+        if let Some(config) = self.config.borrow().outputs.find(&surface.name) {
+            hdr::follow_content(config, &surface.name.connector, &niri.event_loop);
+        }
 
         // Visualize the damage, if enabled.
         if niri.debug_draw_damage {
@@ -2470,7 +2473,7 @@ impl Tty {
                     continue;
                 }
 
-                if hdr::needs_reconnect(config.hdr, surface) {
+                if hdr::needs_reconnect(hdr::wanted(&config, &surface.name.connector), surface) {
                     to_disconnect.push((node, crtc));
                     if let Some(connector) = device.drm_scanner.connectors().get(&surface.connector)
                     {

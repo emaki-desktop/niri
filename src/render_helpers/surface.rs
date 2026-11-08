@@ -134,11 +134,17 @@ pub fn push_elements_from_surface_tree<R>(
                     match WaylandSurfaceRenderElement::from_surface(
                         renderer, surface, states, location, alpha, kind,
                     ) {
-                        Ok(Some(elem)) => push(VibrantSurfaceRenderElement::new(
-                            elem,
-                            vibrancy::vibrancy(states),
-                            color_management::color_params(states),
-                        )),
+                        Ok(Some(elem)) => {
+                            let color = color_management::color_params(states);
+                            if let Some(color) = &color {
+                                super::hdr::note_bright(color.content_peak);
+                            }
+                            push(VibrantSurfaceRenderElement::new(
+                                elem,
+                                vibrancy::vibrancy(states),
+                                color,
+                            ))
+                        }
                         Ok(None) => {} // surface is not mapped
                         Err(err) => {
                             warn!("failed to import surface: {}", err);

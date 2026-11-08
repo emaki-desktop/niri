@@ -70,6 +70,9 @@ pub struct Output {
     /// Drive the output in HDR10 (BT.2020, PQ), when it supports it.
     #[knuffel(child)]
     pub hdr: bool,
+    /// HDR only while something on the output shows content brighter than SDR white (fork).
+    #[knuffel(child)]
+    pub hdr_auto: bool,
     /// How bright SDR white is in HDR mode, in nits.
     #[knuffel(child, unwrap(argument))]
     pub sdr_brightness: Option<FloatOrInt<1, 10000>>,
@@ -109,6 +112,7 @@ impl Default for Output {
             off: false,
             focus_at_startup: false,
             hdr: false,
+            hdr_auto: false,
             sdr_brightness: None,
             name: String::new(),
             scale: None,

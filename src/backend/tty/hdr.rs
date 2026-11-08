@@ -388,3 +388,179 @@ fn set_hdr(props: &ConnectorProperties, caps: &HdrCaps) -> anyhow::Result<()> {
     let _ = props.device.destroy_property_blob(u64::from(blob.blob_id));
     res
 }
+
+/// How long content brighter than SDR white shows before an `hdr-auto` output goes HDR, so a
+/// thumbnail scrolled past doesn't blank the screen for a modeset.
+const AUTO_ON: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// How long an `hdr-auto` output stays in HDR after the last bright content went, so pausing or
+/// seeking a video doesn't switch twice.
+const AUTO_OFF: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// What `hdr-auto` knows of one output, by connector name: it outlives the reconnect that
+/// switching takes.
+#[derive(Debug, Clone, Copy)]
+struct Auto {
+    /// Whether the last render drew bright content, and since when that has been so.
+    bright: bool,
+    since: std::time::Instant,
+    /// Whether the output is in HDR for it.
+    on: bool,
+    /// Whether a check is already on the event loop.
+    armed: bool,
+}
+
+std::thread_local! {
+    static AUTO: std::cell::RefCell<std::collections::HashMap<String, Auto>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Whether the output should be in HDR: `hdr`, or `hdr-auto` with bright content showing.
+pub(super) fn wanted(config: &niri_config::Output, connector: &str) -> bool {
+    config.hdr
+        || (config.hdr_auto
+            && AUTO.with_borrow(|auto| auto.get(connector).is_some_and(|auto| auto.on)))
+}
+
+/// Where `hdr-auto` stands after one look at an output.
+enum Step {
+    Same,
+    Switch,
+    CheckIn(std::time::Duration),
+}
+
+fn next_step(auto: &mut Auto, now: std::time::Instant) -> Step {
+    let elapsed = now.saturating_duration_since(auto.since);
+    let (wait, switch) = match (auto.bright, auto.on) {
+        (true, false) => (AUTO_ON, elapsed >= AUTO_ON),
+        (false, true) => (AUTO_OFF, elapsed >= AUTO_OFF),
+        _ => return Step::Same,
+    };
+    if switch {
+        auto.on = !auto.on;
+        Step::Switch
+    } else {
+        Step::CheckIn(wait - elapsed)
+    }
+}
+
+/// After an output's elements were gathered: follows `hdr-auto` from whether they held content
+/// brighter than SDR white, switching the output (a reconnect, through the config path) once it
+/// has shown for [`AUTO_ON`] or been gone for [`AUTO_OFF`].
+pub(super) fn follow_content(
+    config: &niri_config::Output,
+    connector: &str,
+    event_loop: &smithay::reexports::calloop::LoopHandle<'static, crate::niri::State>,
+) {
+    let bright = crate::render_helpers::hdr::take_bright();
+    if config.hdr || !config.hdr_auto {
+        return;
+    }
+
+    let now = std::time::Instant::now();
+    let step = AUTO.with_borrow_mut(|autos| {
+        let auto = autos.entry(connector.to_owned()).or_insert(Auto {
+            bright,
+            since: now,
+            on: false,
+            armed: false,
+        });
+        if auto.bright != bright {
+            auto.bright = bright;
+            auto.since = now;
+        }
+        let step = next_step(auto, now);
+        if matches!(step, Step::CheckIn(_)) {
+            if auto.armed {
+                return Step::Same;
+            }
+            auto.armed = true;
+        }
+        step
+    });
+
+    arm(step, connector, event_loop);
+}
+
+fn arm(
+    step: Step,
+    connector: &str,
+    event_loop: &smithay::reexports::calloop::LoopHandle<'static, crate::niri::State>,
+) {
+    use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
+
+    match step {
+        Step::Same => (),
+        Step::Switch => {
+            info!("output {connector}: hdr-auto switches HDR");
+            event_loop.insert_idle(|state| state.backend.on_output_config_changed(&mut state.niri));
+        }
+        // nothing may render in the meantime (a paused video, an idle screen), so a timer looks
+        Step::CheckIn(wait) => {
+            let connector = connector.to_owned();
+            let handle = event_loop.clone();
+            let _ = event_loop.insert_source(Timer::from_duration(wait), move |_, _, state| {
+                let step = AUTO.with_borrow_mut(|autos| {
+                    let Some(auto) = autos.get_mut(&connector) else {
+                        return Step::Same;
+                    };
+                    auto.armed = false;
+                    next_step(auto, std::time::Instant::now())
+                });
+                // a check still too early arms again from here
+                if let Step::CheckIn(_) = step {
+                    AUTO.with_borrow_mut(|autos| {
+                        if let Some(auto) = autos.get_mut(&connector) {
+                            auto.armed = true;
+                        }
+                    });
+                }
+                arm(step, &connector, &handle);
+                let _ = state;
+                TimeoutAction::Drop
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod auto_tests {
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    #[test]
+    fn bright_content_switches_on_after_a_second_and_off_ten_after_it_goes() {
+        let start = Instant::now();
+        let mut auto = Auto {
+            bright: true,
+            since: start,
+            on: false,
+            armed: false,
+        };
+        assert!(matches!(next_step(&mut auto, start), Step::CheckIn(_)));
+        assert!(matches!(
+            next_step(&mut auto, start + Duration::from_millis(1100)),
+            Step::Switch
+        ));
+        assert!(auto.on);
+
+        let gone = start + Duration::from_secs(5);
+        auto.bright = false;
+        auto.since = gone;
+        assert!(matches!(
+            next_step(&mut auto, gone + Duration::from_secs(9)),
+            Step::CheckIn(_)
+        ));
+        assert!(auto.on);
+        assert!(matches!(
+            next_step(&mut auto, gone + Duration::from_secs(10)),
+            Step::Switch
+        ));
+        assert!(!auto.on);
+        assert!(matches!(
+            next_step(&mut auto, gone + Duration::from_secs(11)),
+            Step::Same
+        ));
+    }
+}

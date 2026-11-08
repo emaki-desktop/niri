@@ -1354,6 +1354,7 @@ mod tests {
                         ),
                         focus_at_startup: true,
                         hdr: false,
+                        hdr_auto: false,
                         sdr_brightness: None,
                         background_color: Some(
                             Color {
@@ -1397,6 +1398,7 @@ mod tests {
                         variable_refresh_rate: None,
                         focus_at_startup: false,
                         hdr: false,
+                        hdr_auto: false,
                         sdr_brightness: None,
                         background_color: None,
                         backdrop_color: None,
@@ -1428,6 +1430,7 @@ mod tests {
                         variable_refresh_rate: None,
                         focus_at_startup: false,
                         hdr: false,
+                        hdr_auto: false,
                         sdr_brightness: None,
                         background_color: None,
                         backdrop_color: None,

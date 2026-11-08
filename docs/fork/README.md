@@ -3,22 +3,46 @@
 A fork of [niri](https://github.com/niri-wm/niri), the scrollable-tiling Wayland compositor, run
 under the [amane-shell](https://github.com/098765434/amane-shell) bar. It adds glass
 effects, layout extras, a gesture and IPC for the shell; everything else is stock upstream.
+The short notice is [`FORK.md`](../../FORK.md) at the repository root.
 
-Branch `ocbk`, based on the upstream release `v26.04`. Rebasing, branches and the full commit
-log: [maintaining.md](maintaining.md).
+This index has two parts. [Using the fork](#using-the-fork) is for people running it, and for
+amane and amane-shell as its clients: the features, how to get it, and each feature's config,
+protocol or IPC surface. [Maintaining the fork](#maintaining-the-fork) is for whoever keeps it on
+top of upstream: branches, tags and a pointer to the rebase routine.
 
-## Features
+## Using the fork
+
+Branch `ocbk`, based on the upstream release `v26.04` (fork point `fork-base-v26.04`).
+
+### Getting it
+
+The fork builds like upstream niri (`cargo build --release`, or `nix build`; the flake's dev shell
+has the libdisplay-info 0.2 that HDR needs). On NixOS it is used as the compositor through a
+flake input and `programs.niri.package`:
+
+```nix
+inputs.niri-fork = { url = "github:098765434/niri/ocbk"; inputs.nixpkgs.follows = "nixpkgs"; };
+# then, in the system configuration:
+programs.niri.package = inputs.niri-fork.packages.${pkgs.system}.niri;
+```
+
+To bump, `nix flake update niri-fork` and rebuild; for a local checkout,
+`--override-input niri-fork path:$HOME/Projects/desktop/niri`.
+
+A client tells the fork from stock niri with `niri msg features` ([Features](ipc/features.md)).
+
+### Features
 
 | Feature | Summary | Config / IPC surface | Doc | Status |
 |---|---|---|---|---|
 | Materials | named glass looks drawn over the blur | `materials { material "…" { … } }`; `background-effect { material "…" }` in rules | [effects/materials.md](effects/materials.md) | implemented, `e843c4be`, `379f1071`, `c0c39971`, `bf313b9b`, `5f986fdf` |
 | Blur shapes | rounded, fading blur shapes, each with a material and tint | protocol `niri-blur-shapes-v1` | [effects/blur-shapes.md](effects/blur-shapes.md) | implemented, `113728ce`, `39904a0b`, `379f1071` |
 | Vibrancy | a subsurface blended with the backdrop (plus-lighter / plus-darker) | protocol `niri-vibrancy-v1` | [effects/vibrancy.md](effects/vibrancy.md) | implemented, `14ed7262`, `9cdf1c8d` |
-| Effects memory | what xray buffers, blur chains and shape captures hold, built and freed when used | — | [effects/memory.md](effects/memory.md) | implemented, `7874959a` |
+| Effects memory | what xray buffers, blur chains and shape captures hold, built and freed when used | — | [effects/memory.md](effects/memory.md) | implemented, `7874959a`, `54bcc56a` |
 | Workspace mat | a backing behind the scrolling layout that fills the gaps | `layout { mat { … } }` | [layout/workspace-mat.md](layout/workspace-mat.md) | implemented, `7e622e2d`, `3696f762`, `9165052c` |
 | Gaps | gaps between workspaces, and between windows in the overview | `layout { workspace-gap }`, `overview { workspace-gap window-gap }` | [layout/gaps.md](layout/gaps.md) | implemented, `9e57324e`, `f4e61d28`, `193f7663` |
 | Desktop layer | a background layer that stays still on the wallpaper as the desktop | `layer-rule { desktop true }` | [layout/desktop-layer.md](layout/desktop-layer.md) | implemented, `12509ec6` |
-| HDR | HDR10 output with the SDR desktop unchanged, and color-managed HDR surfaces | `output { hdr; sdr-brightness }`, `niri msg output … hdr`, protocol `wp-color-management-v1` | [display/hdr.md](display/hdr.md) | implemented, `ae549528`, `ddd3381d` |
+| HDR | HDR10 output with the SDR desktop unchanged, and color-managed HDR surfaces | `output { hdr; hdr-auto; sdr-brightness }`, `niri msg output … hdr`, protocol `wp-color-management-v1` | [display/hdr.md](display/hdr.md) | implemented, `ae549528`, `ddd3381d`, `a575e7c5` |
 | Mod swipe | Mod-held three-finger swipes close, maximize and resize the focused window | `gestures { mod-swipe { off } }` | [gestures/mod-swipe.md](gestures/mod-swipe.md) | implemented, `823b718a` |
 | IPC events | per-frame gesture progress, when the desktop is obscured, whether a window is fullscreen, Caps Lock and Num Lock, and when the outputs changed | `OverviewProgress`, `ViewOffsetChanged`, `WorkspaceSwitchProgress`, `DesktopObscured`, `Window.is_fullscreen`, `KeyboardLockKeysChanged`, `OutputsChanged` | [ipc/events.md](ipc/events.md) | implemented, `759c9c3f`, `12509ec6`, `26290100`, `989d475e` |
 | IPC actions | move a window's column without moving the focus | `MoveColumnToIndex { window_id }`, `niri msg action move-column-to-index --window-id` | [ipc/actions.md](ipc/actions.md) | implemented, `3a984abc` |
@@ -27,7 +51,7 @@ log: [maintaining.md](maintaining.md).
 
 Each feature doc starts with **Usage** (config, protocol or IPC), then **Design / internals**.
 
-## Groups
+### Groups
 
 - **Effects:** glass. [Materials](effects/materials.md) are the looks,
   [blur shapes](effects/blur-shapes.md) are how a client asks for them in its own shapes, and
@@ -48,7 +72,7 @@ The protocol specs are authoritative for the wire format:
 [`niri-vibrancy-v1.xml`](../../resources/niri-vibrancy-v1.xml) and
 [`niri-secure-fill-v1.xml`](../../resources/niri-secure-fill-v1.xml).
 
-## Used by
+### Used by
 
 - **amane** (fork, which amane-shell is built with): the client side of blur shapes, vibrancy, the desktop layer and
   the IPC events and actions. See amane's
@@ -59,7 +83,34 @@ The protocol specs are authoritative for the wire format:
 The workspace mat, gaps and mod swipe are used only by niri. HDR is set from amane-shell's
 Shell Settings, over IPC and the config.
 
-## Design history
+### What amane-shell relies on
+
+The protocols, IPC events, fields, actions and config that amane-shell (through amane) depends
+on, each with the `Features` name that versions it, are listed in
+[maintaining.md § What amane-shell relies on](maintaining.md#what-amane-shell-relies-on). A
+rebase keeps them, or bumps the feature's version and says so in amane-shell's contract.
+
+## Maintaining the fork
+
+For whoever keeps the fork on top of upstream. The full routine, the hot upstream files, the
+protocol porting notes and the commit log are in [maintaining.md](maintaining.md).
+
+### Branches and tags
+
+| Branch | What |
+|---|---|
+| `ocbk` | the fork; all work happens here |
+| `ocbk-pre-tidy` | `ocbk` before the 2026-11-07 history tidy, kept as history |
+| `mod-swipe-gestures` | experiment, not merged as is: the original mod-swipe work, which landed on `ocbk` as `823b718a` |
+| `pinned-columns` | experiment, not merged: a column docked to a screen edge; see [maintaining.md § Pinned columns](maintaining.md#pinned-columns) |
+
+Tags: upstream's release tags, and `fork-base-v26.04`, the fork's own tag on the upstream commit
+`ocbk` is based on. The delta is `git log --oneline fork-base-v26.04..ocbk`.
+
+Upstream is now [niri-wm/niri](https://github.com/niri-wm/niri) (remote `upstream`); the fork
+is [098765434/niri](https://github.com/098765434/niri) (remote `origin`).
+
+### Design history
 
 Specs kept as written, with a status header:
 

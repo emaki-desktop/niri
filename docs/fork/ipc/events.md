@@ -106,7 +106,7 @@ outputs changed (`ipc_outputs_changed`), so a resting compositor sends none.
   rather than depend on this fork's crate. Stock niri never sends these events.
 
 amane's `Gestures`, `Overview` and `Desktop` services read these events; see amane's
-[compositor services](https://github.com/098765434/amane/blob/ocbk/docs/fork/compositor/services.md).
+[compositor services](https://github.com/emaki-desktop/amane/blob/emaki/docs/fork/compositor/services.md).
 
 ## Design / internals
 

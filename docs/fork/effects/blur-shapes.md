@@ -86,5 +86,5 @@ readings and materials on rules are in [materials.md](materials.md).
 ### Client
 
 amane's `LayerWindow::blur_shapes` (fork,
-[098765434/amane](https://github.com/098765434/amane), `docs/fork/blur.md`). It
+[emaki-desktop/amane](https://github.com/emaki-desktop/amane), `docs/fork/blur.md`). It
 falls back to an `ext-background-effect` region on other compositors.

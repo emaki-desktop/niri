@@ -1,4 +1,4 @@
-# The fork's own CI, for the ocbk branch. It runs upstream's checks inside the
+# The fork's own CI, for the emaki branch. It runs upstream's checks inside the
 # flake's dev shell: the fork's HDR output needs libdisplay-info 0.2
 # (`v0_2`), which the distributions upstream's ci.yml installs from don't
 # ship. upstream's ci.yml is turned off on the fork in the Actions settings,
@@ -7,7 +7,7 @@ name: fork
 
 on:
   push:
-    branches: [ocbk]
+    branches: [emaki]
   pull_request:
   workflow_dispatch:
 
@@ -42,7 +42,7 @@ jobs:
       - name: test
         run: nix develop -c cargo test --all --exclude niri-visual-tests --locked -- --skip=::egl
 
-  # no other vendor's platform terms on the lines the fork added (amane-shell's
+  # no other vendor's platform terms on the lines the fork added (emaki's
   # scripts/lint-terms, against the fork's base tag)
   terms:
     runs-on: ubuntu-24.04
@@ -56,8 +56,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           show-progress: false
-          repository: 098765434/amane-shell
-          path: .amane-shell
+          repository: emaki-desktop/emaki
+          path: .emaki
 
       - name: lint-terms
-        run: .amane-shell/scripts/lint-terms --diff fork-base-v26.04
+        run: .emaki/scripts/lint-terms --diff fork-base-v26.04

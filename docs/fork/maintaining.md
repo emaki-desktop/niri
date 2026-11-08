@@ -8,20 +8,20 @@ workflow and every fork commit. The features themselves are in the [index](READM
 | | |
 |---|---|
 | Upstream | `https://github.com/niri-wm/niri` (remote: `upstream`; it moved there from `YaLTeR/niri`, which redirects) |
-| Fork | `https://github.com/098765434/niri` (remote: `origin`) |
+| Fork | `https://github.com/emaki-desktop/niri` (remote: `origin`) |
 | Base release | **`v26.04`** (matches the niri 26.04 that nixpkgs 26.05 ships), tagged `fork-base-v26.04` |
-| Fork branch | `ocbk` |
-| The delta | `git log --oneline fork-base-v26.04..ocbk` |
+| Fork branch | `emaki` |
+| The delta | `git log --oneline fork-base-v26.04..emaki` |
 
 ## Branches
 
 | Branch | State |
 |---|---|
-| `ocbk` | the fork; everything below is on it |
-| `ocbk-pre-tidy` | history: `ocbk` before the 2026-11-07 history tidy (`16ab6bdb`), kept until a session has run on the new one |
+| `emaki` | the fork; everything below is on it |
+| `ocbk-pre-tidy` | history: `emaki` before the 2026-11-07 history tidy (`16ab6bdb`), kept until a session has run on the new one |
 | `pinned-columns` | experiment, not merged: pushed (`99562604`, based before the docs moved); see [below](#pinned-columns) |
-| `mod-swipe-gestures` | experiment, not merged as a branch: local only, ends at `6d9306a7` (a commit of `ocbk-pre-tidy`); its work is on `ocbk` as `823b718a` |
-| `origin/gesture-ipc-events` | the branch's old name, before it was renamed to `ocbk`; stale (ends at `c5b8c69d`) |
+| `mod-swipe-gestures` | experiment, not merged as a branch: local only, ends at `6d9306a7` (a commit of `ocbk-pre-tidy`); its work is on `emaki` as `823b718a` |
+| `origin/gesture-ipc-events` | the branch's old name, before it was renamed to `emaki`; stale (ends at `c5b8c69d`) |
 
 The other `origin/*` branches are upstream's, mirrored by the GitHub fork.
 
@@ -31,11 +31,11 @@ A column docked to a screen edge, with its own rail, outside the scroll math; ac
 `pin-column`, `unpin-column`, `toggle-column-pinned`, `focus-pinned`. The compositor core is done
 with tests; the overview drop target, shell UI and cross-workspace pins are deferred.
 
-The branch predates `docs/fork/`. When it is rebased onto `ocbk`:
+The branch predates `docs/fork/`. When it is rebased onto `emaki`:
 
 - its root `niri-pinned-columns-spec.md` becomes `docs/fork/layout/pinned-columns.md`, with
   Usage first like the other feature docs, and a row in the [index](README.md);
-- its `FORK.md` has the old layout (a long feature list) and will conflict: keep `ocbk`'s stub
+- its `FORK.md` has the old layout (a long feature list) and will conflict: keep `emaki`'s stub
   and move the pinned-columns notes into the new doc.
 
 ## Docs rule
@@ -64,10 +64,10 @@ Specs that are implemented go in `docs/fork/design/` as history, with a
 ## Reviewing the fork
 
 ```sh
-git log --oneline --stat fork-base-v26.04..ocbk   # every fork commit and the files it touched
-git diff --stat fork-base-v26.04..ocbk            # the whole delta, by file
-git diff fork-base-v26.04..ocbk -- <paths>        # one feature (paths in each feature doc)
-git range-diff <old-base> <new-base> ocbk # after a rebase: what changed in each commit
+git log --oneline --stat fork-base-v26.04..emaki   # every fork commit and the files it touched
+git diff --stat fork-base-v26.04..emaki            # the whole delta, by file
+git diff fork-base-v26.04..emaki -- <paths>        # one feature (paths in each feature doc)
+git range-diff <old-base> <new-base> emaki # after a rebase: what changed in each commit
 ```
 
 ## Consumed by
@@ -75,7 +75,7 @@ git range-diff <old-base> <new-base> ocbk # after a rebase: what changed in each
 Built as the compositor via a flake input (`programs.niri.package`), e.g. in a NixOS config:
 
 ```nix
-niri-fork = { url = "github:098765434/niri/ocbk"; inputs.nixpkgs.follows = "nixpkgs"; };
+niri-fork = { url = "github:emaki-desktop/niri/emaki"; inputs.nixpkgs.follows = "nixpkgs"; };
 ```
 
 Commit on this branch, then `nix flake update niri-fork` and rebuild.
@@ -83,38 +83,38 @@ Commit on this branch, then `nix flake update niri-fork` and rebuild.
 ## Updating to a new upstream release
 
 The fork's commits sit on a release tag, and `fork-base-<tag>` marks the tag the current
-`ocbk` is based on (`fork-base-v26.04` today). Updating is a rebase onto the next tag:
+`emaki` is based on (`fork-base-v26.04` today). Updating is a rebase onto the next tag:
 
 1. **Tag the new base.** Upstream is `https://github.com/niri-wm/niri.git` (check with
    `git remote get-url upstream`; the old `YaLTeR/niri` URL redirects, but set the new one).
    ```sh
    git fetch --tags upstream
    git tag fork-base-<new-tag> <new-tag>
-   git branch ocbk-pre-<new-tag> ocbk     # the way back, until a session has run on the result
+   git branch emaki-pre-<new-tag> emaki     # the way back, until a session has run on the result
    ```
 2. **Rebase.**
    ```sh
-   git rebase --onto fork-base-<new-tag> fork-base-v26.04 ocbk
+   git rebase --onto fork-base-<new-tag> fork-base-v26.04 emaki
    ```
    Conflicts land mostly in the hot files below. Keep upstream's side and re-apply the fork's
    one-line hook; the logic lives in the fork's own files. For a commit upstream already has,
    `git rebase --skip`.
 3. **Read the range-diff.**
    ```sh
-   git range-diff fork-base-v26.04..ocbk-pre-<new-tag> fork-base-<new-tag>..ocbk
+   git range-diff fork-base-v26.04..emaki-pre-<new-tag> fork-base-<new-tag>..emaki
    ```
    Every commit should match its old self apart from conflict fixes. A commit that disappeared
    was either upstreamed or dropped by mistake.
 4. **Build and test** in the dev shell: `cargo build`, `cargo test --all --exclude
    niri-visual-tests -- --skip=::egl` (it includes `fork-docs-parse`), `cargo clippy --all
-   --all-targets`. Then check [what amane-shell relies on](#what-amane-shell-relies-on) still holds:
-   amane-shell's `cargo xtask contract` against the new revision.
+   --all-targets`. Then check [what emaki relies on](#what-emaki-relies-on) still holds:
+   emaki's `cargo xtask contract` against the new revision.
 5. **Run a session** on it: `nix flake update niri-fork` in the consuming config, switch, log in
    again, and check HDR, glass, the mat, the desktop layer and the swipes by eye.
 
 Then replace `v26.04` with the new tag here, in [the index](README.md) and in `FORK.md`, push
-`ocbk` with `--force-with-lease`, push the `fork-base-<new-tag>` tag, and delete
-`ocbk-pre-<new-tag>` once the session looks right.
+`emaki` with `--force-with-lease`, push the `fork-base-<new-tag>` tag, and delete
+`emaki-pre-<new-tag>` once the session looks right.
 
 ### Hot upstream files
 
@@ -156,10 +156,10 @@ tag (follow one of theirs, such as `ext_workspace.rs`), and keep the `*Handler` 
 the new API's object lifetimes. Then run the protocol tests in `src/tests/` (color management
 has its own).
 
-## What amane-shell relies on
+## What emaki relies on
 
-amane-shell (through the amane library) uses these. A rebase keeps them, or bumps the feature's
-version in `src/ipc/features.rs` and says so in amane-shell's `docs/integration/contract.md`.
+emaki (through the amane library) uses these. A rebase keeps them, or bumps the feature's
+version in `src/ipc/features.rs` and says so in emaki's `docs/integration/contract.md`.
 Stock niri has none of them; a client asks [`Features`](ipc/features.md) first.
 
 | Kind | What | Feature |
@@ -183,7 +183,7 @@ Stock niri has none of them; a client asks [`Features`](ipc/features.md) first.
 | Config | `output { hdr; sdr-brightness }` | `hdr 1` |
 | Config | `layout { workspace-gap }`, `overview { workspace-gap window-gap }` | none: config only |
 
-The protocol XMLs are copied byte for byte into amane's `protocols/`; amane-shell's `cargo xtask
+The protocol XMLs are copied byte for byte into amane's `protocols/`; emaki's `cargo xtask
 contract` checks the copies match at the pinned revisions, and that every IPC name amane sends
 or parses exists in `niri-ipc` here.
 
@@ -206,7 +206,7 @@ or parses exists in `niri-ipc` here.
 
 ## Commit log
 
-Every commit in `fork-base-v26.04..ocbk`, oldest first. On 2026-11-07 the history was tidied: fixups were
+Every commit in `fork-base-v26.04..emaki`, oldest first. On 2026-11-07 the history was tidied: fixups were
 squashed into the commits they fix, each feature's docs went into its commit, edits to
 `docs/wiki` and their later reset were dropped, and nothing in the final tree changed apart from a
 comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
@@ -216,7 +216,7 @@ comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
 | `759c9c3f` | [IPC events](ipc/events.md) | live gesture-progress IPC events |
 | `3e821f3d` | housekeeping | add `FORK.md`; ignore `.claude/` |
 | `44065213` | housekeeping | README fork banner; rebase/range-diff workflow |
-| `1a397bc0` | housekeeping | rename the work branch to `ocbk` |
+| `1a397bc0` | housekeeping | rename the work branch to `emaki` |
 | `bf1916c7` | housekeeping | `FORK.md` update |
 | `823b718a` | [mod swipe](gestures/mod-swipe.md) | Mod-held three-finger window swipes, stepping into full width past the widest preset, with its design doc |
 | `113728ce` | [blur shapes](effects/blur-shapes.md) | `niri-blur-shapes-v1`: rounded, fading blur shapes |

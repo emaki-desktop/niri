@@ -1,6 +1,6 @@
 # Spec: desktop layers
 
-Status: implemented in `12509ec6` · Target: niri fork + amane-shell's desktop widgets · Scope: a
+Status: implemented in `12509ec6` · Target: niri fork + emaki's desktop widgets · Scope: a
 layer rule that puts a background layer on the backdrop as the desktop, and an IPC event that tells
 it when it can't be seen.
 
@@ -39,7 +39,7 @@ layer-rule {
 
 ### 1. Goal
 
-amane-shell's desktop widgets are a clear Background-layer surface with frosted cards on it. Drawn
+emaki's desktop widgets are a clear Background-layer surface with frosted cards on it. Drawn
 as a stock background layer, niri copies it into every workspace (`scale_relocate_crop`): the cards
 slide with a workspace switch, shrink with the overview and show on every workspace in it. They
 should behave like things on the wallpaper:
@@ -87,9 +87,9 @@ the coverage test works, is in [ipc/events.md](../ipc/events.md#desktopobscured)
 
 ### 4. Client
 
-amane's `Desktop` service holds the event per output. amane-shell's widgets freeze their surface
+amane's `Desktop` service holds the event per output. emaki's widgets freeze their surface
 (draw nothing, commit nothing) while their output's desktop is obscured, and catch up in one frame
-when it shows again. See amane-shell's `docs/widgets.md`.
+when it shows again. See emaki's `docs/widgets.md`.
 
 ### 5. Files
 

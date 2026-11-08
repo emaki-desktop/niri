@@ -18,7 +18,7 @@ every client. A client that wants vibrant labels on a material:
 For `plus_darker`, the subsurface holds how much to darken, not the color: a grey `c` at alpha
 `a` is drawn as white, `1 − c`, at alpha `a`. Without the global (stock niri) there is no blend, so a client
 should draw its labels normally there. amane's vibrant layer does all of this; see amane's
-[fork docs](https://github.com/098765434/amane/blob/ocbk/docs/fork/README.md).
+[fork docs](https://github.com/emaki-desktop/amane/blob/emaki/docs/fork/README.md).
 
 ## Design / internals
 

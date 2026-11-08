@@ -7,7 +7,7 @@ holding that window to the index, on whichever workspace the window is on, witho
 active column or the focus. Without it, the action does what it always has and moves the focused
 column.
 
-amane-shell's dock needs this. Dragging a window's icon to a new place among its workspace's
+emaki's dock needs this. Dragging a window's icon to a new place among its workspace's
 icons reorders that window's column. If the drag focused the window first, every reorder would
 switch the view to that workspace and column.
 

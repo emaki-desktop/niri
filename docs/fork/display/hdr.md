@@ -1,8 +1,8 @@
 # HDR
 
 Status: implemented in `ae549528` (HDR10 output) and `ddd3381d` (color management). Shell
-Settings' Displays page drives it; see amane-shell's
-[displays.md](https://github.com/098765434/amane-shell/blob/main/docs/shell/displays.md).
+Settings' Displays page drives it; see emaki's
+[displays.md](https://github.com/emaki-desktop/emaki/blob/main/docs/user/features/displays.md).
 
 ## Usage
 
@@ -182,7 +182,7 @@ still to be checked on this machine.
 - The content's light levels are read from its description, not from per-frame metadata.
 - Reference white is the only knob: there is no per-application brightness. On panels that ignore
   their backlight under PQ (the amdgpu OLED this was written on), it is also the screen's
-  brightness: amane-shell moves `sdr-brightness` from the brightness keys and sliders while HDR is
+  brightness: emaki moves `sdr-brightness` from the brightness keys and sliders while HDR is
   on.
 
 ## Testing

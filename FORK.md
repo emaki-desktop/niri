@@ -1,7 +1,7 @@
 # Fork notes — niri
 
 This is a fork of [niri](https://github.com/niri-wm/niri), the scrollable-tiling Wayland
-compositor, for the [amane-shell](https://github.com/098765434/amane-shell) desktop. It is a
+compositor, for the [emaki](https://github.com/emaki-desktop/emaki) desktop. It is a
 thin series of commits on top of a tagged upstream release; everything it doesn't name below is
 stock niri.
 
@@ -23,13 +23,13 @@ stock niri.
 
 ## Branch and base
 
-- Branch `ocbk`, based on upstream `v26.04`; the fork point is tagged `fork-base-v26.04`.
-- The delta: `git log --oneline fork-base-v26.04..ocbk`.
+- Branch `emaki`, based on upstream `v26.04`; the fork point is tagged `fork-base-v26.04`.
+- The delta: `git log --oneline fork-base-v26.04..emaki`.
 
 ## Using it
 
 Running the fork, building it into a NixOS config, each feature's config, protocol or IPC
-surface, and what amane-shell relies on:
+surface, and what emaki relies on:
 **[docs/fork/README.md § Using the fork](docs/fork/README.md#using-the-fork)**.
 
 ## Maintaining it

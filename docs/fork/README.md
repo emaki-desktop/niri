@@ -1,18 +1,18 @@
 # niri fork docs
 
 A fork of [niri](https://github.com/niri-wm/niri), the scrollable-tiling Wayland compositor, run
-under the [amane-shell](https://github.com/098765434/amane-shell) bar. It adds glass
+under the [emaki](https://github.com/emaki-desktop/emaki) bar. It adds glass
 effects, layout extras, a gesture and IPC for the shell; everything else is stock upstream.
 The short notice is [`FORK.md`](../../FORK.md) at the repository root.
 
 This index has two parts. [Using the fork](#using-the-fork) is for people running it, and for
-amane and amane-shell as its clients: the features, how to get it, and each feature's config,
+amane and emaki as its clients: the features, how to get it, and each feature's config,
 protocol or IPC surface. [Maintaining the fork](#maintaining-the-fork) is for whoever keeps it on
 top of upstream: branches, tags and a pointer to the rebase routine.
 
 ## Using the fork
 
-Branch `ocbk`, based on the upstream release `v26.04` (fork point `fork-base-v26.04`).
+Branch `emaki`, based on the upstream release `v26.04` (fork point `fork-base-v26.04`).
 
 ### Getting it
 
@@ -21,7 +21,7 @@ has the libdisplay-info 0.2 that HDR needs). On NixOS it is used as the composit
 flake input and `programs.niri.package`:
 
 ```nix
-inputs.niri-fork = { url = "github:098765434/niri/ocbk"; inputs.nixpkgs.follows = "nixpkgs"; };
+inputs.niri-fork = { url = "github:emaki-desktop/niri/emaki"; inputs.nixpkgs.follows = "nixpkgs"; };
 # then, in the system configuration:
 programs.niri.package = inputs.niri-fork.packages.${pkgs.system}.niri;
 ```
@@ -74,21 +74,21 @@ The protocol specs are authoritative for the wire format:
 
 ### Used by
 
-- **amane** (fork, which amane-shell is built with): the client side of blur shapes, vibrancy, the desktop layer and
+- **amane** (fork, which emaki is built with): the client side of blur shapes, vibrancy, the desktop layer and
   the IPC events and actions. See amane's
-  [fork docs](https://github.com/098765434/amane/blob/ocbk/docs/fork/README.md).
-- **amane-shell** (the bar, dock and widgets): see its
-  [docs](https://github.com/098765434/amane-shell/blob/main/docs/README.md).
+  [fork docs](https://github.com/emaki-desktop/amane/blob/emaki/docs/fork/README.md).
+- **emaki** (the bar, dock and widgets): see its
+  [docs](https://github.com/emaki-desktop/emaki/blob/main/docs/README.md).
 
-The workspace mat, gaps and mod swipe are used only by niri. HDR is set from amane-shell's
-Shell Settings, over IPC and the config.
+The workspace mat, gaps and mod swipe are used only by niri. HDR is set from emaki's
+Emaki Settings, over IPC and the config.
 
-### What amane-shell relies on
+### What emaki relies on
 
-The protocols, IPC events, fields, actions and config that amane-shell (through amane) depends
+The protocols, IPC events, fields, actions and config that emaki (through amane) depends
 on, each with the `Features` name that versions it, are listed in
-[maintaining.md § What amane-shell relies on](maintaining.md#what-amane-shell-relies-on). A
-rebase keeps them, or bumps the feature's version and says so in amane-shell's contract.
+[maintaining.md § What emaki relies on](maintaining.md#what-emaki-relies-on). A
+rebase keeps them, or bumps the feature's version and says so in emaki's contract.
 
 ## Maintaining the fork
 
@@ -99,16 +99,16 @@ protocol porting notes and the commit log are in [maintaining.md](maintaining.md
 
 | Branch | What |
 |---|---|
-| `ocbk` | the fork; all work happens here |
-| `ocbk-pre-tidy` | `ocbk` before the 2026-11-07 history tidy, kept as history |
-| `mod-swipe-gestures` | experiment, not merged as is: the original mod-swipe work, which landed on `ocbk` as `823b718a` |
+| `emaki` | the fork; all work happens here |
+| `ocbk-pre-tidy` | `emaki` before the 2026-11-07 history tidy, kept as history |
+| `mod-swipe-gestures` | experiment, not merged as is: the original mod-swipe work, which landed on `emaki` as `823b718a` |
 | `pinned-columns` | experiment, not merged: a column docked to a screen edge; see [maintaining.md § Pinned columns](maintaining.md#pinned-columns) |
 
 Tags: upstream's release tags, and `fork-base-v26.04`, the fork's own tag on the upstream commit
-`ocbk` is based on. The delta is `git log --oneline fork-base-v26.04..ocbk`.
+`emaki` is based on. The delta is `git log --oneline fork-base-v26.04..emaki`.
 
 Upstream is now [niri-wm/niri](https://github.com/niri-wm/niri) (remote `upstream`); the fork
-is [098765434/niri](https://github.com/098765434/niri) (remote `origin`).
+is [emaki-desktop/niri](https://github.com/emaki-desktop/niri) (remote `origin`).
 
 ### Design history
 

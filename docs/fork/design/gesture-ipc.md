@@ -291,7 +291,7 @@ pub fn ipc_refresh_workspace_switch(&mut self) {
 ## 7. Client integration (Amane shell)
 
 The client lives in amane: see its
-[compositor services](https://github.com/098765434/amane/blob/ocbk/docs/fork/compositor/services.md).
+[compositor services](https://github.com/emaki-desktop/amane/blob/emaki/docs/fork/compositor/services.md).
 In short, it parses the JSON by key, its socket reader only stores the values and reads on
 (or the 64-event buffer fills and niri drops it mid-gesture), and rendering happens on a
 separate frame loop.

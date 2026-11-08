@@ -7,20 +7,20 @@ workflow and every fork commit. The features themselves are in the [index](READM
 
 | | |
 |---|---|
-| Upstream | `https://github.com/niri-wm/niri` (remote: `upstream`) |
+| Upstream | `https://github.com/niri-wm/niri` (remote: `upstream`; it moved there from `YaLTeR/niri`, which redirects) |
 | Fork | `https://github.com/098765434/niri` (remote: `origin`) |
 | Base release | **`v26.04`** (matches the niri 26.04 that nixpkgs 26.05 ships), tagged `fork-base-v26.04` |
 | Fork branch | `ocbk` |
-| The delta | `git log --oneline v26.04..ocbk` |
+| The delta | `git log --oneline fork-base-v26.04..ocbk` |
 
 ## Branches
 
 | Branch | State |
 |---|---|
 | `ocbk` | the fork; everything below is on it |
-| `pinned-columns` | unmerged work, pushed (`99562604`, based before the docs moved); see [below](#pinned-columns) |
-| `ocbk-pre-tidy` | `ocbk` before the 2026-11-07 history tidy (`16ab6bdb`), kept until a session has run on the new one |
-| `mod-swipe-gestures` | local only, merged into `ocbk` (ends at `6d9306a7`, a commit of `ocbk-pre-tidy`) |
+| `ocbk-pre-tidy` | history: `ocbk` before the 2026-11-07 history tidy (`16ab6bdb`), kept until a session has run on the new one |
+| `pinned-columns` | experiment, not merged: pushed (`99562604`, based before the docs moved); see [below](#pinned-columns) |
+| `mod-swipe-gestures` | experiment, not merged as a branch: local only, ends at `6d9306a7` (a commit of `ocbk-pre-tidy`); its work is on `ocbk` as `823b718a` |
 | `origin/gesture-ipc-events` | the branch's old name, before it was renamed to `ocbk`; stale (ends at `c5b8c69d`) |
 
 The other `origin/*` branches are upstream's, mirrored by the GitHub fork.
@@ -40,15 +40,19 @@ The branch predates `docs/fork/`. When it is rebased onto `ocbk`:
 
 ## Docs rule
 
-Upstream files stay byte-identical to `v26.04`. All fork documentation lives in `docs/fork/`;
-the only upstream-adjacent changes are the one-line banner at the top of `README.md` and the
-`FORK.md` stub. So this prints nothing:
+Upstream files stay byte-identical to `v26.04`, with the exceptions `FORK.md` names: the
+one-line banner at the top of `README.md`, the `v0_2` feature of `libdisplay-info` in
+`Cargo.toml`, and `.claude/` in `.gitignore`. Everything else the fork adds is in new files
+(`FORK.md`, `docs/fork/`, `resources/niri-*-v1.xml`, `.github/workflows/fork.yml`) or in
+hooks inside upstream's sources. All fork documentation lives in `docs/fork/`, so this prints
+nothing:
 
 ```sh
-git diff v26.04 HEAD -- docs/wiki
+git diff fork-base-v26.04 HEAD -- docs/wiki
 ```
 
-and a rebase only ever conflicts on `FORK.md` and the README banner line, never on a wiki page.
+and a rebase only ever conflicts on the README banner line and the `Cargo.toml` line, never on
+a wiki page.
 New user-facing docs for a fork feature go in that feature's doc under `docs/fork/`, as its
 Usage section, not into `docs/wiki/`. Upstream's `niri-config/tests/wiki-parses.rs` checks the
 wiki's ```` ```kdl ```` blocks; the fork's own `niri-config/tests/fork-docs-parse.rs` does the same
@@ -60,9 +64,9 @@ Specs that are implemented go in `docs/fork/design/` as history, with a
 ## Reviewing the fork
 
 ```sh
-git log --oneline --stat v26.04..ocbk     # every fork commit and the files it touched
-git diff --stat v26.04..ocbk              # the whole delta, by file
-git diff v26.04..ocbk -- <paths>          # one feature (paths in each feature doc)
+git log --oneline --stat fork-base-v26.04..ocbk   # every fork commit and the files it touched
+git diff --stat fork-base-v26.04..ocbk            # the whole delta, by file
+git diff fork-base-v26.04..ocbk -- <paths>        # one feature (paths in each feature doc)
 git range-diff <old-base> <new-base> ocbk # after a rebase: what changed in each commit
 ```
 
@@ -81,7 +85,8 @@ Commit on this branch, then `nix flake update niri-fork` and rebuild.
 The fork's commits sit on a release tag, and `fork-base-<tag>` marks the tag the current
 `ocbk` is based on (`fork-base-v26.04` today). Updating is a rebase onto the next tag:
 
-1. **Tag the new base.**
+1. **Tag the new base.** Upstream is `https://github.com/niri-wm/niri.git` (check with
+   `git remote get-url upstream`; the old `YaLTeR/niri` URL redirects, but set the new one).
    ```sh
    git fetch --tags upstream
    git tag fork-base-<new-tag> <new-tag>
@@ -114,16 +119,16 @@ Then replace `v26.04` with the new tag here, in [the index](README.md) and in `F
 ### Hot upstream files
 
 The fork keeps its logic in its own files and leaves short hooks in upstream's, so a conflict
-there is a line to re-add. Fork hunks against `v26.04` (`git diff v26.04 -U0 -- <file> | grep -c
+there is a line to re-add. Fork hunks against `v26.04` (`git diff fork-base-v26.04 -U0 -- <file> | grep -c
 '^@@'`):
 
 | File | Hunks | Lines added | Where the logic lives |
 |---|---|---|---|
-| `src/backend/tty.rs` | 30 (36 before `4e448827`) | 119 (374 before) | `src/backend/tty/hdr.rs` |
-| `src/niri.rs` | 36 (38 before `7f180178`) | 101 (163 before) | `src/niri/fork.rs` |
+| `src/backend/tty.rs` | 31 (36 before `4e448827`) | 122 (374 before) | `src/backend/tty/hdr.rs` |
+| `src/niri.rs` | 38 (38 before `7f180178`) | 103 (163 before) | `src/niri/fork.rs` |
 | `src/render_helpers/framebuffer_effect.rs` | 20 | 486 | in place: mostly new types and functions appended, so they rarely conflict |
 | `src/render_helpers/background_effect.rs` | 25 | 320 | in place, the same |
-| `src/render_helpers/xray.rs` | 21 | 219 | in place: `compute_uniforms` and buffer release are reworked, so upstream changes to xray conflict here |
+| `src/render_helpers/xray.rs` | 21 | 220 | in place: `compute_uniforms` and buffer release are reworked, so upstream changes to xray conflict here |
 
 What stays in `tty.rs`: the HDR fields on `Surface`, the 10-bit retry when the DRM compositor
 can't be created (it is threaded through upstream's invalid-modifier retry), and the HDR fields of
@@ -201,7 +206,7 @@ or parses exists in `niri-ipc` here.
 
 ## Commit log
 
-Every commit in `v26.04..ocbk`, oldest first. On 2026-11-07 the history was tidied: fixups were
+Every commit in `fork-base-v26.04..ocbk`, oldest first. On 2026-11-07 the history was tidied: fixups were
 squashed into the commits they fix, each feature's docs went into its commit, edits to
 `docs/wiki` and their later reset were dropped, and nothing in the final tree changed apart from a
 comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
@@ -246,3 +251,7 @@ comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
 | `7f180178` | housekeeping | `Niri`'s fork parts in `src/niri/fork.rs` |
 | `4e448827` | [HDR](display/hdr.md) | HDR on a TTY output in `src/backend/tty/hdr.rs` |
 | `989d475e` | [IPC events](ipc/events.md) | `KeyboardLockKeysChanged` and `OutputsChanged` (`src/ipc/server/fork.rs`) |
+| `f8c4e94e`, `dc3e72c7`, `d42a83ad` | housekeeping | docs: the commit log, the index's event and protocol names, the mod-swipe and mat call flows as Mermaid |
+| `a575e7c5` | [HDR](display/hdr.md) | `hdr-auto`: HDR only while something on the output is HDR |
+| `54bcc56a` | [effects memory](effects/memory.md) | a change re-blurs an xray buffer only near where it's sampled |
+| `cfece120`, `d0563d47`, `0cf3ec8e` | housekeeping | docs: upstream moved to `niri-wm/niri`; `FORK.md` as a fork notice; the index in two parts |

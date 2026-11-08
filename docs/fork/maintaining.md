@@ -7,7 +7,7 @@ workflow and every fork commit. The features themselves are in the [index](READM
 
 | | |
 |---|---|
-| Upstream | `https://github.com/YaLTeR/niri` (remote: `upstream`) |
+| Upstream | `https://github.com/niri-wm/niri` (remote: `upstream`) |
 | Fork | `https://github.com/098765434/niri` (remote: `origin`) |
 | Base release | **`v26.04`** (matches the niri 26.04 that nixpkgs 26.05 ships), tagged `fork-base-v26.04` |
 | Fork branch | `ocbk` |

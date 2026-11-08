@@ -1,6 +1,6 @@
 # Fork notes — niri
 
-A fork of [niri](https://github.com/YaLTeR/niri), the scrollable-tiling Wayland compositor, run
+A fork of [niri](https://github.com/niri-wm/niri), the scrollable-tiling Wayland compositor, run
 under the [amane-shell](https://github.com/098765434/amane-shell) bar. It adds glass
 effects, layout extras, a gesture and IPC for the shell, as a thin series of commits on top of a
 tagged upstream release. Everything else is stock.

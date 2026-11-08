@@ -1,4 +1,4 @@
-> **Fork** of [niri](https://github.com/YaLTeR/niri) with extra features — see **[FORK.md](FORK.md)**. The rest of this README is upstream's.
+> **Fork** of [niri](https://github.com/niri-wm/niri) with extra features — see **[FORK.md](FORK.md)**. The rest of this README is upstream's.
 
 <h1 align="center"><img alt="niri" src="https://github.com/user-attachments/assets/07d05cd0-d5dc-4a28-9a35-51bae8f119a0"></h1>
 <p align="center">A scrollable-tiling Wayland compositor.</p>

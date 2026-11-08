@@ -412,7 +412,8 @@ impl RenderElement<GlesRenderer> for XrayElement {
         _cache: Option<&UserDataMap>,
     ) -> Result<(), GlesError> {
         let mut buffer = self.buffer.borrow_mut();
-        let texture = match buffer.render_with(frame, self.blur, self.blur_options) {
+        let texture = match buffer.render_with(frame, self.blur, self.blur_options, Some(self.src))
+        {
             Ok(x) => x,
             Err(err) => {
                 warn!("error rendering effect buffer: {err:?}");

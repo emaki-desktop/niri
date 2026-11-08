@@ -9,7 +9,7 @@ use smithay::backend::renderer::utils::CommitCounter;
 use smithay::backend::renderer::{
     Bind as _, Color32F, ContextId, FrameContext as _, Offscreen as _, Renderer as _, Texture,
 };
-use smithay::utils::{Buffer, Logical, Physical, Scale, Size, Transform};
+use smithay::utils::{Buffer, Logical, Physical, Rectangle, Scale, Size, Transform};
 
 use crate::niri::OutputRenderElements;
 use crate::render_helpers::blur::{Blur, BlurOptions};
@@ -53,6 +53,8 @@ struct Variant {
     blur: Blur,
     /// Reset to `None` along with the main blurred texture.
     blurred: Option<GlesTexture>,
+    /// Where the contents changed since `blurred` was made (fork); see [`Stale`].
+    stale: Stale,
     /// The frame this variant was last asked for.
     used_at: u64,
 }
@@ -94,6 +96,61 @@ struct Offscreen {
     ///
     /// When texture needs to be reblurred, this field must be reset to `None`.
     blurred: Option<GlesTexture>,
+    /// Where the contents changed since `blurred` was made (fork); see [`Stale`].
+    stale: Stale,
+}
+
+/// Where a buffer's contents changed since one of its blurs was made (fork). A blur is only
+/// made again for an area that samples near a change: a desktop widget repainting leaves the
+/// bar's frost, a strip at the top of the same full-screen buffer, as it was, instead of
+/// blurring the whole buffer again for every tick of a clock. `NIRI_REBLUR_ALL=1` blurs again
+/// on every change, as before.
+#[derive(Debug, Default)]
+struct Stale {
+    rects: Vec<Rectangle<i32, Buffer>>,
+}
+
+/// How many changed rectangles a [`Stale`] keeps before it keeps their bounding box instead.
+const MAX_STALE: usize = 16;
+
+impl Stale {
+    fn add(&mut self, damage: &[Rectangle<i32, Physical>]) {
+        self.rects.extend(damage.iter().map(|rect| {
+            Rectangle::new(
+                (rect.loc.x, rect.loc.y).into(),
+                (rect.size.w, rect.size.h).into(),
+            )
+        }));
+        if self.rects.len() > MAX_STALE {
+            let all = self.rects.iter().copied().reduce(|a, b| a.merge(b));
+            self.rects = all.into_iter().collect();
+        }
+    }
+
+    /// Whether a blur still shows `area` as it is: nothing changed within the blur's reach of it.
+    fn still_shows(&self, area: Option<Rectangle<f64, Buffer>>, options: BlurOptions) -> bool {
+        static REBLUR_ALL: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+            std::env::var_os("NIRI_REBLUR_ALL").is_some_and(|v| v == "1")
+        });
+        if self.rects.is_empty() {
+            return true;
+        }
+        let Some(area) = area else {
+            return false;
+        };
+        if *REBLUR_ALL {
+            return false;
+        }
+        // dual kawase reaches about offset · 2^(passes + 1) pixels; kept wide on purpose
+        let reach = (options.offset * f64::from(1u32 << (options.passes + 1))).ceil() + 2.;
+        let mut near = area;
+        near.loc.x -= reach;
+        near.loc.y -= reach;
+        near.size.w += 2. * reach;
+        near.size.h += 2. * reach;
+        let near = near.to_i32_up();
+        !self.rects.iter().any(|rect| rect.overlaps(near))
+    }
 }
 
 impl Default for Elements {
@@ -289,6 +346,7 @@ impl EffectBuffer {
                     options,
                     blur,
                     blurred: None,
+                    stale: Stale::default(),
                     used_at: self.frame,
                 }
             }
@@ -372,6 +430,7 @@ impl EffectBuffer {
                 damage,
                 states: RenderElementStates::default(),
                 blurred: None,
+                stale: Stale::default(),
             })
         };
 
@@ -411,12 +470,19 @@ impl EffectBuffer {
 
         offscreen.states = res.states;
 
-        if res.damage.is_some() {
+        if let Some(damage) = res.damage {
             self.commit_counter.increment();
 
-            // Original texture changed; reset the blurred textures.
-            offscreen.blurred = None;
-            unblur(&mut self.variants);
+            // Original texture changed: each blur is made again where it's next asked for near
+            // the change (Stale), and stays for areas the change doesn't reach.
+            if offscreen.blurred.is_some() {
+                offscreen.stale.add(damage);
+            }
+            for variant in &mut self.variants {
+                if variant.blurred.is_some() {
+                    variant.stale.add(damage);
+                }
+            }
         }
 
         // Clear and put the storage back.
@@ -468,17 +534,19 @@ impl EffectBuffer {
     }
 
     pub fn render(&mut self, frame: &mut GlesFrame, blur: bool) -> anyhow::Result<GlesTexture> {
-        self.render_with(frame, blur, None)
+        self.render_with(frame, blur, None, None)
     }
 
     /// [`render`](Self::render), blurred with `options` in place of the buffer's when given:
     /// a variant [`prepare_with`](Self::prepare_with) prepared. One it didn't falls back to the
-    /// buffer's own blur.
+    /// buffer's own blur. `area` is the part of the buffer the caller samples, when it knows:
+    /// a blur made before a change elsewhere is kept for it (fork).
     pub fn render_with(
         &mut self,
         frame: &mut GlesFrame,
         blur: bool,
         options: Option<BlurOptions>,
+        area: Option<Rectangle<f64, Buffer>>,
     ) -> anyhow::Result<GlesTexture> {
         let offscreen = self.offscreen.as_mut().context("offscreen is missing")?;
 
@@ -491,8 +559,11 @@ impl EffectBuffer {
             .and_then(|options| self.variants.iter_mut().find(|v| v.options == options));
         if let Some(variant) = variant {
             if let Some(texture) = &variant.blurred {
-                return Ok(texture.clone());
+                if variant.stale.still_shows(area, variant.options) {
+                    return Ok(texture.clone());
+                }
             }
+            variant.stale = Stale::default();
             let mut guard = frame.renderer();
             let renderer = guard.as_mut();
             let blurred = variant
@@ -503,8 +574,11 @@ impl EffectBuffer {
         }
 
         if let Some(texture) = &offscreen.blurred {
-            return Ok(texture.clone());
+            if offscreen.stale.still_shows(area, self.blur_options) {
+                return Ok(texture.clone());
+            }
         }
+        offscreen.stale = Stale::default();
 
         // An area that turns out to draw with the buffer's own options, which prepare_with
         // was told nothing needs: prepare that chain now.
@@ -530,5 +604,58 @@ impl EffectBuffer {
 fn unblur(variants: &mut [Variant]) {
     for variant in variants {
         variant.blurred = None;
+    }
+}
+
+#[cfg(test)]
+mod stale_tests {
+    use super::*;
+
+    const OPTIONS: BlurOptions = BlurOptions {
+        passes: 4,
+        offset: 2.,
+    };
+
+    fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Physical> {
+        Rectangle::new((x, y).into(), (w, h).into())
+    }
+
+    fn area(x: f64, y: f64, w: f64, h: f64) -> Option<Rectangle<f64, Buffer>> {
+        Some(Rectangle::new((x, y).into(), (w, h).into()))
+    }
+
+    #[test]
+    fn a_change_far_from_the_bar_keeps_its_blur() {
+        let mut stale = Stale::default();
+        assert!(stale.still_shows(area(0., 0., 2880., 42.), OPTIONS));
+
+        // a widget repaint in the middle of the screen
+        stale.add(&[rect(1200, 600, 400, 300)]);
+        assert!(stale.still_shows(area(0., 0., 2880., 42.), OPTIONS));
+        // the widget's own glass samples right there
+        assert!(!stale.still_shows(area(1100., 500., 600., 500.), OPTIONS));
+        // a caller that doesn't say where it samples always gets a fresh blur
+        assert!(!stale.still_shows(None, OPTIONS));
+    }
+
+    #[test]
+    fn a_change_within_the_blurs_reach_blurs_again() {
+        let mut stale = Stale::default();
+        // 4 passes at offset 2 reach about 64 px
+        stale.add(&[rect(0, 90, 100, 10)]);
+        assert!(!stale.still_shows(area(0., 0., 2880., 42.), OPTIONS));
+        let mut stale = Stale::default();
+        stale.add(&[rect(0, 200, 100, 10)]);
+        assert!(stale.still_shows(area(0., 0., 2880., 42.), OPTIONS));
+    }
+
+    #[test]
+    fn many_changes_fold_into_their_bounding_box() {
+        let mut stale = Stale::default();
+        for i in 0..40 {
+            stale.add(&[rect(1000 + i, 800, 1, 1)]);
+        }
+        assert!(stale.rects.len() <= MAX_STALE);
+        assert!(stale.still_shows(area(0., 0., 2880., 42.), OPTIONS));
     }
 }

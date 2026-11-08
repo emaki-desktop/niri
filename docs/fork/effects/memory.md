@@ -44,6 +44,20 @@ What the fork changed (commit `7874959a`):
   drops them right after, and the unmap snapshot drops the screencast target it filled. A
   running cast renders its target again next frame and gets them back then.
 
+### A change blurs again only where it's sampled
+
+An `EffectBuffer` kept each blur until its offscreen took damage, then made every chain again
+for the whole buffer. The backdrop buffer holds `desktop true` layers (the shell's widgets), so
+a widget repainting, a clock's tick, re-blurred the full-screen frost chain behind the bar, a
+strip at the top of the screen.
+
+Each blur now keeps a `Stale` list of where the offscreen changed since it was made (folded
+into one bounding box past 16 rectangles). `render_with` takes the area its caller samples
+(`XrayElement` passes its `src`) and keeps the blur when no change lies within the blur's reach
+of that area, about `offset · 2^(passes + 1)` pixels; a caller that doesn't say where it
+samples gets a fresh blur, as before. Memory is the same; what it saves is the full-screen
+blur passes, on every widget repaint. `NIRI_REBLUR_ALL=1` blurs again on every change.
+
 ## Blur-shape captures
 
 A surface's blur shapes draw from one capture of the area behind them all

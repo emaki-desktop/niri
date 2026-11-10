@@ -73,7 +73,7 @@ takes a `window_id`.
 
 # `SetWallpaperDim`
 
-Status: implemented for emaki's Black appearance (OLED energy saving).
+Status: implemented in `2991b01e`, for emaki's Black appearance (OLED energy saving).
 
 Dims the wallpaper by a percentage over a black backdrop. At 100 the wallpaper isn't drawn at
 all. On an OLED panel the pixels behind the windows then stay off, and blur (xray and blur

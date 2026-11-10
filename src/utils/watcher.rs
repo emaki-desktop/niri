@@ -11,10 +11,13 @@ use smithay::reexports::calloop::channel::SyncSender;
 
 use crate::niri::State;
 
+mod fork;
+use fork::{FsWatch, Wake};
+
 const POLLING_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct Watcher {
-    load_config: mpsc::Sender<Option<String>>,
+    load_config: mpsc::Sender<Wake>,
 }
 
 struct WatcherInner {
@@ -59,6 +62,7 @@ impl Watcher {
         changed: SyncSender<Result<Config, ()>>,
     ) -> Self {
         let (load_config, load_config_rx) = mpsc::channel();
+        let mut fs_watch = FsWatch::new(load_config.clone());
 
         thread::Builder::new()
             .name(format!("Filesystem Watcher for {path:?}"))
@@ -66,8 +70,11 @@ impl Watcher {
                 let mut inner = WatcherInner::new(path, includes);
 
                 loop {
-                    let mut should_load = match load_config_rx.recv_timeout(POLLING_INTERVAL) {
-                        Ok(path) => {
+                    fs_watch.update(&inner);
+                    let mut should_load = match load_config_rx.recv_timeout(fs_watch.interval()) {
+                        Ok(Wake::Check) => false,
+                        Ok(Wake::Stop) => break,
+                        Ok(Wake::Load(path)) => {
                             if let Some(path) = path {
                                 inner = WatcherInner::new(
                                     ConfigPath::Explicit(PathBuf::from(path)),
@@ -114,7 +121,7 @@ impl Watcher {
     }
 
     pub fn load_config(&self, path: Option<String>) {
-        let _ = self.load_config.send(path);
+        let _ = self.load_config.send(Wake::Load(path));
     }
 }
 

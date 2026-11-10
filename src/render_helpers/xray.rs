@@ -175,6 +175,10 @@ impl Xray {
         let mut backdrop = self.backdrop[ctx.target as usize].borrow_mut();
         // prepared the first time an area needs it
         let mut backdrop_ready = None;
+        // An empty backdrop (the wallpaper hidden, no desktop layer) renders transparent, and
+        // blurred it's still transparent: it gets no blur chain and no blur passes, and a tick
+        // lets go of a chain it had. The glass over it draws as before, from `bg_color`.
+        let backdrop_blur = blur && !backdrop.is_empty();
 
         for (params, xray_pos) in areas {
             // a material draws with the glass shader, when it compiled
@@ -294,7 +298,8 @@ impl Xray {
 
             let ready = *backdrop_ready.get_or_insert_with(|| {
                 let prev = backdrop.commit();
-                let ready = backdrop.prepare_with(ctx.renderer, blur, &variants, base_used);
+                let ready =
+                    backdrop.prepare_with(ctx.renderer, backdrop_blur, &variants, base_used);
                 if ready && backdrop.commit() != prev {
                     trace!("backdrop damaged");
                 }
@@ -337,7 +342,7 @@ impl Xray {
                 material,
                 tint: params.tint,
                 fade: params.fade,
-                blur,
+                blur: backdrop_blur,
                 blur_options: options,
                 noise,
                 saturation,

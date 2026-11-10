@@ -54,12 +54,12 @@ pub(super) fn apply(
     hdr: &mut bool,
 ) -> anyhow::Result<()> {
     let Some(caps) = caps.filter(|_| *hdr) else {
-        return reset_hdr(props);
+        return reset_sdr(props);
     };
     if let Err(err) = set_hdr(props, &caps) {
         warn!("couldn't set HDR properties, staying in SDR: {err:?}");
         *hdr = false;
-        let _ = reset_hdr(props);
+        let _ = reset_sdr(props);
     }
     Ok(())
 }
@@ -76,7 +76,7 @@ pub(super) fn color_formats(hdr: bool) -> &'static [Fourcc] {
 /// Resets the connector's HDR properties, ignoring errors.
 pub(super) fn reset(drm: &DrmDevice, connector: connector::Handle) {
     if let Ok(props) = ConnectorProperties::try_new(drm, connector) {
-        let _ = reset_hdr(&props);
+        let _ = reset_sdr(&props);
     }
 }
 
@@ -139,7 +139,7 @@ pub(super) fn reset_before_pause(device: &OutputDevice) {
 pub(super) fn restore(props: &ConnectorProperties, surface: &Surface) -> anyhow::Result<()> {
     match surface.hdr_caps.filter(|_| surface.hdr.is_some()) {
         Some(caps) => set_hdr(props, &caps),
-        None => reset_hdr(props),
+        None => reset_sdr(props),
     }
 }
 
@@ -149,7 +149,7 @@ pub(super) fn reset_on_disconnect(drm: &DrmDevice, surface: &Surface) {
         return;
     }
     if let Ok(props) = ConnectorProperties::try_new(drm, surface.connector) {
-        if let Err(err) = reset_hdr(&props) {
+        if let Err(err) = reset_sdr(&props) {
             debug!("couldn't reset HDR properties: {err:?}");
         }
     }
@@ -342,6 +342,40 @@ fn hdr_metadata_blob(caps: &HdrCaps) -> [u8; 32] {
     blob
 }
 
+/// The `max bpc` [`set_hdr`] asks for.
+const HDR_MAX_BPC: u64 = 10;
+
+/// The `max bpc` an SDR connector goes back to: 8 bits a channel carry the 8-bit scanout
+/// formats SDR uses, and a narrower link draws less power.
+const SDR_MAX_BPC: u64 = 8;
+
+/// Puts the connector back in SDR: upstream's [`reset_hdr`], and the link's bits per channel,
+/// which upstream never raises and so never resets. Left at 10 after an HDR episode
+/// (`hdr-auto`), an eDP panel would keep a wider link for the rest of the session.
+fn reset_sdr(props: &ConnectorProperties) -> anyhow::Result<()> {
+    let hdr = reset_hdr(props);
+    let bpc = reset_max_bpc(props);
+    hdr.and(bpc)
+}
+
+/// Lowers `max bpc` from the value HDR set. Any other value is someone else's choice (the
+/// kernel's default, a tool's), so it's left as it is, as is a connector without the property.
+fn reset_max_bpc(props: &ConnectorProperties) -> anyhow::Result<()> {
+    let Ok((info, value)) = props.find(c"max bpc") else {
+        return Ok(());
+    };
+    if *value != HDR_MAX_BPC {
+        return Ok(());
+    }
+    if let property::ValueType::UnsignedRange(min, max) = info.value_type() {
+        props
+            .device
+            .set_property(props.connector, info.handle(), SDR_MAX_BPC.clamp(min, max))
+            .context("error setting max bpc")?;
+    }
+    Ok(())
+}
+
 /// Puts the connector in HDR10: 10 bits a channel on the link, BT.2020 colorimetry, and PQ
 /// metadata. amdgpu turns these into a modeset of their own.
 fn set_hdr(props: &ConnectorProperties, caps: &HdrCaps) -> anyhow::Result<()> {
@@ -349,7 +383,7 @@ fn set_hdr(props: &ConnectorProperties, caps: &HdrCaps) -> anyhow::Result<()> {
     if let property::ValueType::UnsignedRange(min, max) = info.value_type() {
         props
             .device
-            .set_property(props.connector, info.handle(), 10u64.clamp(min, max))
+            .set_property(props.connector, info.handle(), HDR_MAX_BPC.clamp(min, max))
             .context("error setting max bpc")?;
     }
 

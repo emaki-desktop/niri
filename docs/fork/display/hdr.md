@@ -95,7 +95,9 @@ into a modeset of their own):
 - `HDR_OUTPUT_METADATA`: a `hdr_output_metadata` blob with static metadata type 1, the ST 2084
   EOTF, and the EDID's primaries and luminance (BT.2020 when the EDID gives no primaries).
 
-`reset_hdr` puts the connector back to SDR. It runs when the output connects in SDR, when it
+`reset_sdr` puts the connector back to SDR: upstream's `reset_hdr` for the metadata and
+`Colorspace`, and `max bpc` back to 8 when it's still the 10 HDR set (any other value is left
+alone), so after an `hdr-auto` episode the link doesn't stay wide for the session. It runs when the output connects in SDR, when it
 disconnects, and before niri leaves the VT, so a text console or greeter is never shown as PQ.
 On resume an HDR output gets its HDR back. If the 10-bit compositor can't be made, niri resets
 the properties and makes an 8-bit one. If smithay's atomic commits ever fight these properties,

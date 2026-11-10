@@ -4,6 +4,8 @@
 //! mode, and fades out as the overview opens. It only reads the geometry the scrolling layout
 //! already computes each frame. See `docs/fork/layout/workspace-mat.md`.
 
+use std::cell::RefCell;
+
 use niri_config::{Color, CornerRadius, GradientInterpolation, MatColumnFill, MatEnds};
 use smithay::backend::renderer::element::Kind;
 use smithay::utils::{Logical, Point, Rectangle, Size};
@@ -153,6 +155,10 @@ pub struct Mat {
     geometry: Option<MatGeometry>,
     /// One per cell, kept across frames so damage tracking only sees real changes.
     buffers: Vec<SolidColorBuffer>,
+    /// The soft ends' gradients, kept across frames for the same reason: a new element is a
+    /// new id, which the damage tracker sees as damaged however unchanged it is. Updated at
+    /// render, where the alpha is known.
+    ends: RefCell<[BorderRenderElement; 2]>,
     color: Color,
     material: Option<niri_config::MaterialParams>,
     /// The material name last warned about, to warn once.
@@ -173,6 +179,7 @@ impl Mat {
         Self {
             geometry: None,
             buffers: Vec::new(),
+            ends: RefCell::new([BorderRenderElement::empty(), BorderRenderElement::empty()]),
             color: Color::default(),
             material: None,
             warned_material: None,
@@ -297,12 +304,13 @@ impl Mat {
                 ..self.color
             };
             // The gradient runs along x, from the transparent outer edge to the slab.
-            for (end, from, to) in [
+            let mut elems = self.ends.borrow_mut();
+            for (elem, (end, from, to)) in elems.iter_mut().zip([
                 (ends[0], transparent, self.color),
                 (ends[1], self.color, transparent),
-            ] {
+            ]) {
                 let area = Rectangle::from_size(end.size);
-                let elem = BorderRenderElement::new(
+                elem.update(
                     end.size,
                     area,
                     GradientInterpolation::default(),
@@ -314,9 +322,8 @@ impl Mat {
                     CornerRadius::default(),
                     self.scale as f32,
                     alpha,
-                )
-                .with_location(end.loc);
-                push(elem.into());
+                );
+                push(elem.clone().with_location(end.loc).into());
             }
         }
 

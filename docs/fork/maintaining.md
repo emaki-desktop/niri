@@ -255,3 +255,8 @@ comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
 | `a575e7c5` | [HDR](display/hdr.md) | `hdr-auto`: HDR only while something on the output is HDR |
 | `54bcc56a` | [effects memory](effects/memory.md) | a change re-blurs an xray buffer only near where it's sampled |
 | `cfece120`, `d0563d47`, `0cf3ec8e` | housekeeping | docs: upstream moved to `niri-wm/niri`; `FORK.md` as a fork notice; the index in two parts |
+| `202ddb13`, `c085ef09`, `226b0de6` | housekeeping | docs: maintaining; CI's terms check against `fork-base-v26.04`; the new home, `emaki-desktop/niri` |
+| `2991b01e`, `9d47c8f2` | [wallpaper dim](ipc/actions.md#setwallpaperdim) | `SetWallpaperDim`, the wallpaper dimmed or hidden over a black backdrop, with [power.md](display/power.md) |
+| `ac5a832f` | [HDR](display/hdr.md) | `max bpc` back to 8 when the connector leaves HDR |
+| `fdb0688e` | [effects memory](effects/memory.md) | an empty xray backdrop gets no blur |
+| `049ce3df` | [workspace mat](layout/workspace-mat.md) | the soft ends keep their element ids, so an unchanged mat isn't damage |

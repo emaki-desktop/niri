@@ -9,7 +9,8 @@ shell sets for the battery (emaki's `docs/user/features/displays.md`).
 - **The wallpaper under Black.** [`SetWallpaperDim`](../ipc/actions.md#setwallpaperdim) dims the
   background layers over a black backdrop, or at 100 doesn't draw them. With emaki's Black
   surfaces the screen behind and between windows is then black, and an OLED leaves black pixels
-  off. A hidden wallpaper also leaves the xray buffers empty, so blur samples nothing.
+  off. A hidden wallpaper also leaves the xray backdrop empty: glass over it still draws its
+  tint, but the backdrop gets no blur chain and runs no blur passes.
 - **No glass under Black.** emaki's shell sends no blur shapes while it shows black surfaces (its
   glass is Solid), so niri runs no blur passes for its surfaces.
 
@@ -22,9 +23,13 @@ shell sets for the battery (emaki's `docs/user/features/displays.md`).
   frames, and the panel can self-refresh (PSR, PSR2/selective update, Panel Replay).
 - **Damage reaches KMS.** smithay's `DrmCompositor` sets `FB_DAMAGE_CLIPS` on the primary plane
   from the frame's damage, which PSR2 and Panel Replay use to send only what changed.
-- **Variable refresh idles low.** With VRR on there's no frame to flip while nothing changes, so
-  the panel stretches its vblank to its lowest rate (30 Hz on the 2880×1800 120 Hz OLED this was
-  written on), as the kernel's `VRR_ENABLED` documents.
+- **Variable refresh idles low, at a price.** With VRR on there's no frame to flip while nothing
+  changes, so the panel stretches its vblank to its lowest rate (30 Hz on the 2880×1800 120 Hz
+  OLED this was written on), as the kernel's `VRR_ENABLED` documents. But amdgpu turns PSR and
+  Panel Replay off while VRR is enabled, and that costs more than the lower rate saves: measured
+  on that laptop (kernel 7.2, a still screen), 120 Hz with Replay drew 3.81 W, 120 Hz with VRR
+  4.00 W and no Replay, and 60 Hz 3.87 W, also without Replay. So leave VRR to games and video
+  (`on-demand=true`, which with no window rule asking for it never turns VRR on).
 - **The fork's blur keeps what didn't change.** An `EffectBuffer` blurs again only where its
   backdrop changed within the blur's reach of what is sampled ([memory.md](../effects/memory.md)).
 

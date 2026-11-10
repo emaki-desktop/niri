@@ -14,6 +14,22 @@ shell sets for the battery (emaki's `docs/user/features/displays.md`).
 - **No glass under Black.** emaki's shell sends no blur shapes while it shows black surfaces (its
   glass is Solid), so niri runs no blur passes for its surfaces.
 
+## Config watcher
+
+Upstream checks the config and its includes for changes every 500 ms, which woke a thread twice a
+second all session: on a still desktop about half of niri's wakeups. The fork
+(`src/utils/watcher/fork.rs`) watches their directories with inotify instead, and an event there
+wakes the same check (a changed mtime or symlink target), 100 ms after it so a burst of writes is
+one check. What it watches:
+
+- the directory of the config, of each include, and of where each resolves to, or the nearest
+  directory above that exists, so one made later is seen being made;
+- not the Nix store: nothing there changes in place, and a new generation is a symlink swapped in
+  a watched directory (`~/.config/niri/config.kdl`).
+
+The check still runs every 10 s for what the watches can't see, such as a symlinked directory
+swapped higher up, and every 500 ms, as upstream, when inotify isn't available.
+
 ## What upstream already does, checked
 
 - **Nothing changes, nothing is drawn.** An output redraws only when something queues a redraw

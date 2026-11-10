@@ -35,6 +35,7 @@ niri is built, so ask once per connection.
 | `desktop-obscured` | 1 | the [`DesktopObscured`](events.md) event |
 | `lock-keys` | 1 | the [`KeyboardLockKeysChanged`](events.md) event |
 | `outputs-changed` | 1 | the [`OutputsChanged`](events.md) event |
+| `wallpaper-dim` | 1 | the [`SetWallpaperDim`](actions.md#setwallpaperdim) action |
 
 The protocol versions come from the globals' own constants, so they can't drift. Any other
 version goes up by hand in `src/ipc/features.rs` when the feature changes in a way a client can

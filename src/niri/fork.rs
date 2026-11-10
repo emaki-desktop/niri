@@ -2,6 +2,8 @@
 //! popups, and letting capture buffers go. `niri.rs` holds one field and one-line calls, so a
 //! rebase meets few fork hunks there.
 
+use niri_config::OutputName;
+use smithay::backend::renderer::Color32F;
 use smithay::desktop::LayerMap;
 use smithay::reexports::wayland_server::{Client, DisplayHandle};
 use smithay::wayland::shell::wlr_layer::Layer;
@@ -23,6 +25,8 @@ pub struct ForkStates {
     pub vibrancy: VibrancyManagerState,
     pub secure_fill: SecureFillManagerState,
     pub color_management: ColorManagementState,
+    /// How much the wallpaper is dimmed, 0–100 (`SetWallpaperDim`): emaki's Black appearance.
+    pub wallpaper_dim: u8,
 }
 
 impl ForkStates {
@@ -40,9 +44,18 @@ impl ForkStates {
                 client_is_unrestricted,
             ),
             color_management: ColorManagementState::new::<State>(display_handle),
+            wallpaper_dim: 0,
         };
         states.set_materials(materials);
         states
+    }
+
+    /// The output's backdrop colour as the config gives it, made black while the wallpaper is
+    /// dimmed: a dimmed wallpaper fades to black, and a hidden one leaves black.
+    pub fn black_backdrop(&self, color: &mut [f32; 4]) {
+        if self.wallpaper_dim > 0 {
+            *color = [0., 0., 0., 1.];
+        }
     }
 
     fn set_materials(&mut self, materials: &niri_config::Materials) {
@@ -73,10 +86,40 @@ impl Niri {
         }
     }
 
-    /// The opacity a layer surface is drawn with on top of its rules: a desktop layer fades out
-    /// as the overview opens.
+    /// Dims the wallpaper by `percent` (0–100) over a black backdrop, as `SetWallpaperDim`
+    /// asks, and draws every output again.
+    pub fn set_wallpaper_dim(&mut self, percent: u8) {
+        let percent = percent.min(100);
+        if self.fork.wallpaper_dim == percent {
+            return;
+        }
+        self.fork.wallpaper_dim = percent;
+
+        let config = self.config.borrow();
+        for (output, state) in self.output_state.iter_mut() {
+            let name = output.user_data().get::<OutputName>().unwrap();
+            let mut color = config
+                .outputs
+                .find(name)
+                .and_then(|c| c.backdrop_color)
+                .unwrap_or(config.overview.backdrop_color)
+                .to_array_unpremul();
+            color[3] = 1.;
+            self.fork.black_backdrop(&mut color);
+            state.backdrop_buffer.set_color(Color32F::from(color));
+        }
+        drop(config);
+        self.queue_redraw_all();
+    }
+
+    /// The opacity a layer surface is drawn with on top of its rules: the wallpaper (a
+    /// background layer that isn't a desktop layer) dims with `SetWallpaperDim`, and a desktop
+    /// layer fades out as the overview opens.
     pub(super) fn layer_fade(&self, mapped: &MappedLayer) -> f32 {
         if !mapped.is_desktop() {
+            if mapped.surface().layer() == Layer::Background {
+                return wallpaper_fade(self.fork.wallpaper_dim);
+            }
             return 1.;
         }
 
@@ -105,5 +148,23 @@ impl Niri {
             let xray_pos = XrayPos::default().offset(loc);
             mapped.render_popups(ctx.r(), None, loc, xray_pos, fade, push);
         }
+    }
+}
+
+/// The wallpaper's opacity at `dim` percent: 0 at 100, where it isn't drawn at all.
+fn wallpaper_fade(dim: u8) -> f32 {
+    1. - f32::from(dim.min(100)) / 100.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_full_dim_hides_the_wallpaper() {
+        assert_eq!(wallpaper_fade(0), 1.);
+        assert_eq!(wallpaper_fade(75), 0.25);
+        assert_eq!(wallpaper_fade(100), 0.);
+        assert_eq!(wallpaper_fade(200), 0.);
     }
 }

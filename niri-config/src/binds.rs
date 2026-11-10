@@ -368,6 +368,8 @@ pub enum Action {
     OpenOverview,
     CloseOverview,
     #[knuffel(skip)]
+    SetWallpaperDim(u8),
+    #[knuffel(skip)]
     ToggleWindowUrgent(u64),
     #[knuffel(skip)]
     SetWindowUrgent(u64),
@@ -713,6 +715,7 @@ impl From<niri_ipc::Action> for Action {
             niri_ipc::Action::SetWindowUrgent { id } => Self::SetWindowUrgent(id),
             niri_ipc::Action::UnsetWindowUrgent { id } => Self::UnsetWindowUrgent(id),
             niri_ipc::Action::LoadConfigFile { path } => Self::LoadConfigFile(path),
+            niri_ipc::Action::SetWallpaperDim { percent } => Self::SetWallpaperDim(percent),
         }
     }
 }

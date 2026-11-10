@@ -19,6 +19,7 @@ stock niri.
 - **IPC events:** per-frame gesture progress (`OverviewProgress`, `ViewOffsetChanged`, `WorkspaceSwitchProgress`), `Window.is_fullscreen`, `KeyboardLockKeysChanged`, `OutputsChanged`.
 - **IPC actions:** `MoveColumnToIndex` by window id, so a dock moves a column without moving the focus.
 - **Features:** the `Features` request, which of these the running niri has; stock niri answers with an error.
+- **Wallpaper dim:** the `SetWallpaperDim` IPC action, the wallpaper dimmed or not drawn over a black backdrop, for OLED panels; see [power.md](docs/fork/display/power.md).
 - **HDR:** HDR10 output (`hdr`, `hdr-auto`, `sdr-brightness`) with the SDR desktop unchanged, and color-managed HDR surfaces through `wp-color-management-v1`.
 
 ## Branch and base

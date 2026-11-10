@@ -1770,6 +1770,7 @@ impl State {
                 .unwrap_or(full_config.overview.backdrop_color)
                 .to_array_unpremul();
             backdrop_color[3] = 1.;
+            self.niri.fork.black_backdrop(&mut backdrop_color);
             let backdrop_color = Color32F::from(backdrop_color);
 
             if let Some(state) = self.niri.output_state.get_mut(output) {
@@ -2855,6 +2856,7 @@ impl Niri {
             .unwrap_or(config.overview.backdrop_color)
             .to_array_unpremul();
         backdrop_color[3] = 1.;
+        self.fork.black_backdrop(&mut backdrop_color);
 
         // FIXME: fix winit damage on other transforms.
         if name.connector == "winit" {

@@ -70,3 +70,46 @@ moves the **focused** column. A client must only send the id to this fork.
 
 Upstreamable: likely. It's small, optional, and matches how `MoveWindowToWorkspace` already
 takes a `window_id`.
+
+# `SetWallpaperDim`
+
+Status: implemented for emaki's Black appearance (OLED energy saving).
+
+Dims the wallpaper by a percentage over a black backdrop. At 100 the wallpaper isn't drawn at
+all. On an OLED panel the pixels behind the windows then stay off, and blur (xray and blur
+shapes) has no wallpaper to sample. The setting lasts until it's set again or niri restarts; it
+isn't in the config, because the shell owns it (it follows `appearance.json`'s Black).
+
+## Usage
+
+```sh
+niri msg action set-wallpaper-dim 100   # hide the wallpaper
+niri msg action set-wallpaper-dim 75    # dim it
+niri msg action set-wallpaper-dim 0     # as configured
+```
+
+As an IPC request:
+
+```json
+{"Action":{"SetWallpaperDim":{"percent":75}}}
+```
+
+The feature name is `wallpaper-dim` ([features.md](features.md)). It's allowed while the screen
+is locked, so the lock screen's backdrop changes along with the desktop's.
+
+## Design / internals
+
+| Layer | What |
+|---|---|
+| `niri-ipc/src/lib.rs` | `Action::SetWallpaperDim { percent: u8 }` |
+| `niri-config/src/binds.rs` | `Action::SetWallpaperDim(u8)` (`#[knuffel(skip)]`, IPC only) |
+| `src/input/mod.rs` | calls `Niri::set_wallpaper_dim` |
+| `src/niri/fork.rs` | `ForkStates::wallpaper_dim`, `set_wallpaper_dim`, `black_backdrop`, and the wallpaper's share of `layer_fade` |
+| `src/niri.rs` | one `black_backdrop` call where each output's backdrop colour is worked out (on config reload and when an output is added) |
+
+"The wallpaper" is every background-layer surface that isn't a [desktop layer](../layout/desktop-layer.md):
+`layer_fade` gives it `1 - percent / 100`, so it draws over the backdrop at that opacity, and at 0
+`render_layer_normal` skips it, both in the output's render and in the xray buffers it fills. While
+`percent` is above 0 each output's backdrop (`overview.backdrop-color`, or the output's own) is
+black, so the dimmed wallpaper fades to black rather than to the backdrop colour. Desktop layers
+(the shell's widgets) aren't dimmed. The workspace mat and `background-color` are the config's.

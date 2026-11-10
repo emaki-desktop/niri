@@ -46,6 +46,7 @@ A client tells the fork from stock niri with `niri msg features` ([Features](ipc
 | Mod swipe | Mod-held three-finger swipes close, maximize and resize the focused window | `gestures { mod-swipe { off } }` | [gestures/mod-swipe.md](gestures/mod-swipe.md) | implemented, `823b718a` |
 | IPC events | per-frame gesture progress, when the desktop is obscured, whether a window is fullscreen, Caps Lock and Num Lock, and when the outputs changed | `OverviewProgress`, `ViewOffsetChanged`, `WorkspaceSwitchProgress`, `DesktopObscured`, `Window.is_fullscreen`, `KeyboardLockKeysChanged`, `OutputsChanged` | [ipc/events.md](ipc/events.md) | implemented, `759c9c3f`, `12509ec6`, `26290100`, `989d475e` |
 | IPC actions | move a window's column without moving the focus | `MoveColumnToIndex { window_id }`, `niri msg action move-column-to-index --window-id` | [ipc/actions.md](ipc/actions.md) | implemented, `3a984abc` |
+| Wallpaper dim | the wallpaper dimmed, or not drawn, over a black backdrop, for OLED panels | `SetWallpaperDim { percent }`, `niri msg action set-wallpaper-dim` | [ipc/actions.md](ipc/actions.md#setwallpaperdim), [display/power.md](display/power.md) | implemented, not committed |
 | Features | which of these the running niri has, with each contract's version; stock niri answers with an error | `Request::Features`, `niri msg features` | [ipc/features.md](ipc/features.md) | implemented, `bebe757d` |
 | Secure fill | a password manager fills the focused field only if it's still the one it checked, and learns its owner from the socket | protocol `niri-secure-fill-v1` | [input/secure-fill.md](input/secure-fill.md); `resources/niri-secure-fill-v1.xml` | implemented, `85a7be33` |
 
@@ -61,7 +62,7 @@ Each feature doc starts with **Usage** (config, protocol or IPC), then **Design 
   fills the gaps, [gaps](layout/gaps.md) sets the space between workspaces and overview windows,
   and the [desktop layer](layout/desktop-layer.md) keeps widgets on the wallpaper.
 - **Display:** [HDR](display/hdr.md), the output in HDR10 and clients' color described through
-  `wp-color-management-v1`.
+  `wp-color-management-v1`; [power](display/power.md), what keeps an OLED laptop's desktop cheap.
 - **Gestures:** [Mod swipe](gestures/mod-swipe.md), touchpad swipes on the focused window.
 - **Input:** [Secure fill](input/secure-fill.md), checked password fill for the shell's input method.
 - **IPC:** [events](ipc/events.md) a bar animates from, [actions](ipc/actions.md) a dock

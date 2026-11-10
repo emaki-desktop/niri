@@ -945,6 +945,20 @@ pub enum Action {
         #[cfg_attr(feature = "clap", arg(long))]
         id: u64,
     },
+    /// Dim the wallpaper (fork only).
+    ///
+    /// Dims the background-layer surfaces that aren't desktop layers (the wallpaper) by this
+    /// much, over a black backdrop; 100 doesn't draw them at all, so an OLED panel leaves those
+    /// pixels off and blur has no wallpaper to sample. Lasts until set again, or niri restarts.
+    #[cfg_attr(
+        feature = "clap",
+        clap(about = "Dim the wallpaper by a percentage (fork)")
+    )]
+    SetWallpaperDim {
+        /// How much to dim it, 0 (not at all) to 100 (not drawn).
+        #[cfg_attr(feature = "clap", arg(value_parser = clap::value_parser!(u8).range(0..=100)))]
+        percent: u8,
+    },
     /// Reload the config file.
     ///
     /// Can be useful for scripts changing the config file, to avoid waiting the small duration for

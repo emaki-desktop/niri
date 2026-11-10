@@ -2277,6 +2277,7 @@ impl State {
                 self.niri.layout.toggle_overview();
                 self.niri.queue_redraw_all();
             }
+            Action::SetWallpaperDim(percent) => self.niri.set_wallpaper_dim(percent),
             Action::OpenOverview => {
                 if self.niri.layout.open_overview() {
                     self.niri.queue_redraw_all();
@@ -4684,6 +4685,7 @@ fn allowed_when_locked(action: &Action) -> bool {
             | Action::PowerOnMonitors
             | Action::SwitchLayout(_)
             | Action::ToggleKeyboardShortcutsInhibit
+            | Action::SetWallpaperDim(_)
     )
 }
 

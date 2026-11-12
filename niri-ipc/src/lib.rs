@@ -1126,7 +1126,8 @@ pub enum OutputAction {
     },
     /// Turn HDR on or off.
     ///
-    /// The output must support HDR10. Changing it reconnects the output.
+    /// The output must support HDR10. Changing it reconnects the output. Off also pauses
+    /// `hdr-auto` until the config is read again.
     Hdr {
         /// Whether to enable HDR.
         #[cfg_attr(

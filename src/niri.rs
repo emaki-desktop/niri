@@ -1935,7 +1935,14 @@ impl State {
                     None
                 }
             }
-            niri_ipc::OutputAction::Hdr { hdr } => config.hdr = hdr,
+            niri_ipc::OutputAction::Hdr { hdr } => {
+                config.hdr = hdr;
+                // off means off: `hdr-auto` would otherwise turn it straight back on for bright
+                // content. Both come back when the config is read again.
+                if !hdr {
+                    config.hdr_auto = false;
+                }
+            }
             niri_ipc::OutputAction::SdrBrightness { nits } => {
                 config.sdr_brightness = Some(FloatOrInt(nits.clamp(1., 10000.)));
             }

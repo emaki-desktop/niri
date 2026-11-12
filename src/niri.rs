@@ -4672,6 +4672,15 @@ impl Niri {
 
         self.update_render_elements(Some(output));
 
+        // An animated cursor (a wait or progress icon) only needs frames where it shows: not
+        // while hidden by typing or inactivity, and not on the other outputs (fork).
+        let cursor_animates = self.monitors_active
+            && self.pointer_visibility.is_visible()
+            && self.output_under_cursor().as_ref() == Some(output)
+            && self
+                .cursor_manager
+                .is_current_cursor_animated(output.current_scale().integer_scale());
+
         let mut res = RenderResult::Skipped;
         if self.monitors_active {
             let state = self.output_state.get_mut(output).unwrap();
@@ -4683,10 +4692,8 @@ impl Niri {
             state.unfinished_animations_remain |= self.window_mru_ui.are_animations_ongoing();
             state.unfinished_animations_remain |= state.screen_transition.is_some();
 
-            // Also keep redrawing if the current cursor is animated.
-            state.unfinished_animations_remain |= self
-                .cursor_manager
-                .is_current_cursor_animated(output.current_scale().integer_scale());
+            // Also keep redrawing if the current cursor is animated, and shows here.
+            state.unfinished_animations_remain |= cursor_animates;
 
             // Also check layer surfaces.
             if !state.unfinished_animations_remain {

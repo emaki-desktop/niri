@@ -264,3 +264,6 @@ comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
 | `3b1d78b9`, `1011f491` | upstream | cherry-picked from upstream `main` (`bb38b7e1`, `78b7adfe`): no frame callbacks while the monitors are off; a rebase onto a tag that has them drops them |
 | `3135c2bf` | [config watcher](display/power.md#config-watcher) | the config watcher woken by inotify, not polling twice a second |
 | `05cc0b26` | [HDR](display/hdr.md#automatic-hdr-hdr-auto) | an IPC HDR off also pauses `hdr-auto` until the config is read again |
+| `66ce460d` | [power](display/power.md) | a re-blur after a nearby change drops the old blur first (it failed the unique-reference check and left the stale blur) |
+| `d10afa30` | [power](display/power.md) | an animated cursor redraws only the output it shows on, and not while hidden |
+| `2657cf7b` | [HDR](display/hdr.md#automatic-hdr-hdr-auto) | `hdr-auto` decides from the output's own frame, not a screencast's or screenshot's |

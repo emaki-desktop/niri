@@ -263,3 +263,4 @@ comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
 | `621a4a93` | housekeeping | docs: VRR turns Panel Replay off, measured; the commit log |
 | `3b1d78b9`, `1011f491` | upstream | cherry-picked from upstream `main` (`bb38b7e1`, `78b7adfe`): no frame callbacks while the monitors are off; a rebase onto a tag that has them drops them |
 | `3135c2bf` | [config watcher](display/power.md#config-watcher) | the config watcher woken by inotify, not polling twice a second |
+| `05cc0b26` | [HDR](display/hdr.md#automatic-hdr-hdr-auto) | an IPC HDR off also pauses `hdr-auto` until the config is read again |

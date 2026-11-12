@@ -170,6 +170,11 @@ switching is the same reconnect as `hdr` changing in the config (`hdr::wanted` i
 calloop timer looks again when a delay runs out. The state is kept by connector name, so it
 outlives the reconnect.
 
+`niri msg output <name> hdr off` (`OutputAction::Hdr { hdr: false }`) turns `hdr-auto` off as well,
+until the config is read again; otherwise the next bright frame would switch the output straight
+back. Emaki's battery mode uses it to keep the panel in SDR on battery, and reloads the config on
+the adapter.
+
 In SDR mode surfaces are told the output is sRGB, so a client that tone-maps to the output's
 preferred description, and only sends HDR once the output says it shows HDR, never switches an
 `hdr-auto` output on. Which players and games describe their content as it is, and so do, is

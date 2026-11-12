@@ -883,6 +883,9 @@ impl XdgActivationHandler for State {
     }
 
     fn token_created(&mut self, _token: XdgActivationToken, data: XdgActivationTokenData) -> bool {
+        // expired tokens are swept while any remain (fork)
+        self.niri.arm_activation_sweep();
+
         // Tokens without a serial are urgency-only. This is not specified, but it seems to be the
         // common client behavior.
         //

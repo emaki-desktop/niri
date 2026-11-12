@@ -269,6 +269,11 @@ pub struct Niri {
     pub is_lid_closed: bool,
     /// The monitors were turned off because the lid closed with no external display (fork).
     pub monitors_off_for_lid: bool,
+    /// Whether the 1 s frame-callback fallback timer is armed; it stops itself while the
+    /// monitors are off (fork).
+    pub fallback_timer_armed: bool,
+    /// Whether the activation-token sweep is armed; it runs only while tokens remain (fork).
+    pub activation_sweep_armed: bool,
 
     pub devices: HashSet<input::Device>,
     pub tablets: HashMap<input::Device, TabletData>,
@@ -2407,18 +2412,9 @@ impl Niri {
             GammaControlManagerState::new::<State, _>(&display_handle, move |client| {
                 is_tty && !client.get_data::<ClientState>().unwrap().restricted
             });
+        // The token sweep is armed when a token is made (arm_activation_sweep), not forever
+        // (fork).
         let activation_state = XdgActivationState::new::<State>(&display_handle);
-        event_loop
-            .insert_source(
-                Timer::from_duration(XDG_ACTIVATION_TOKEN_TIMEOUT),
-                |_, _, state| {
-                    state.niri.activation_state.retain_tokens(|_, token_data| {
-                        token_data.timestamp.elapsed() < XDG_ACTIVATION_TOKEN_TIMEOUT
-                    });
-                    TimeoutAction::ToDuration(XDG_ACTIVATION_TOKEN_TIMEOUT)
-                },
-            )
-            .unwrap();
 
         let mutter_x11_interop_state =
             MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
@@ -2483,15 +2479,7 @@ impl Niri {
         #[cfg(feature = "dbus")]
         let a11y = A11y::new(event_loop.clone());
 
-        event_loop
-            .insert_source(
-                Timer::from_duration(Duration::from_secs(1)),
-                |_, _, state| {
-                    state.niri.send_frame_callbacks_on_fallback_timer();
-                    TimeoutAction::ToDuration(Duration::from_secs(1))
-                },
-            )
-            .unwrap();
+        arm_fallback_timer(&event_loop);
 
         let socket_name = create_wayland_socket.then(|| {
             let socket_source = ListeningSocketSource::new_auto().unwrap();
@@ -2573,6 +2561,8 @@ impl Niri {
             monitors_active: true,
             is_lid_closed: false,
             monitors_off_for_lid: false,
+            fallback_timer_armed: true,
+            activation_sweep_armed: false,
 
             devices: HashSet::new(),
             tablets: HashMap::new(),
@@ -3102,6 +3092,10 @@ impl Niri {
 
         self.monitors_active = true;
         backend.set_monitors_active(true);
+        // the fallback timer stops itself while the monitors are off (fork)
+        if !mem::replace(&mut self.fallback_timer_armed, true) {
+            arm_fallback_timer(&self.event_loop);
+        }
 
         self.queue_redraw_all();
     }
@@ -5228,6 +5222,28 @@ impl Niri {
         }
     }
 
+    /// Arms the activation-token sweep, if it isn't: it runs while tokens remain (fork).
+    pub fn arm_activation_sweep(&mut self) {
+        if mem::replace(&mut self.activation_sweep_armed, true) {
+            return;
+        }
+        self.event_loop
+            .insert_source(
+                Timer::from_duration(XDG_ACTIVATION_TOKEN_TIMEOUT),
+                |_, _, state| {
+                    state.niri.activation_state.retain_tokens(|_, token_data| {
+                        token_data.timestamp.elapsed() < XDG_ACTIVATION_TOKEN_TIMEOUT
+                    });
+                    if state.niri.activation_state.tokens().next().is_none() {
+                        state.niri.activation_sweep_armed = false;
+                        return TimeoutAction::Drop;
+                    }
+                    TimeoutAction::ToDuration(XDG_ACTIVATION_TOKEN_TIMEOUT)
+                },
+            )
+            .unwrap();
+    }
+
     pub fn send_frame_callbacks_on_fallback_timer(&mut self) {
         if !self.monitors_active || self.output_state.is_empty() {
             return;
@@ -6660,4 +6676,24 @@ niri_render_elements! {
         // Used for the CPU-rendered panels.
         RelocatedMemoryBuffer = RelocateRenderElement<MemoryRenderBufferRenderElement<R>>,
     }
+}
+
+/// The 1 s timer that sends frame callbacks to surfaces no output shows. It stops itself while
+/// the monitors are off, when nothing should be animating (fork); activate_monitors arms it
+/// again. It also gets the loop to refresh() now and then (screencopy cast expiry, animation
+/// clean-up), which doesn't matter with nothing on screen.
+fn arm_fallback_timer(event_loop: &LoopHandle<'static, State>) {
+    event_loop
+        .insert_source(
+            Timer::from_duration(Duration::from_secs(1)),
+            |_, _, state| {
+                if !state.niri.monitors_active {
+                    state.niri.fallback_timer_armed = false;
+                    return TimeoutAction::Drop;
+                }
+                state.niri.send_frame_callbacks_on_fallback_timer();
+                TimeoutAction::ToDuration(Duration::from_secs(1))
+            },
+        )
+        .unwrap();
 }

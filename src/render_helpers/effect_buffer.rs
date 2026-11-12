@@ -564,6 +564,9 @@ impl EffectBuffer {
                 }
             }
             variant.stale = Stale::default();
+            // the old blur is a clone of the chain's output texture: drop it, or the chain
+            // can't render into it (Blur::render wants the only reference)
+            variant.blurred = None;
             let mut guard = frame.renderer();
             let renderer = guard.as_mut();
             let blurred = variant
@@ -579,6 +582,8 @@ impl EffectBuffer {
             }
         }
         offscreen.stale = Stale::default();
+        // as for a variant above: the chain renders into the texture this holds
+        offscreen.blurred = None;
 
         // An area that turns out to draw with the buffer's own options, which prepare_with
         // was told nothing needs: prepare that chain now.

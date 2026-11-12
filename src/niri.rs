@@ -267,6 +267,8 @@ pub struct Niri {
     /// Libinput guarantees that the lid switch starts in open state, and if it was closed during
     /// startup, libinput will immediately send a closed event.
     pub is_lid_closed: bool,
+    /// The monitors were turned off because the lid closed with no external display (fork).
+    pub monitors_off_for_lid: bool,
 
     pub devices: HashSet<input::Device>,
     pub tablets: HashMap<input::Device, TabletData>,
@@ -794,6 +796,30 @@ impl State {
         debug!("laptop lid {}", if is_closed { "closed" } else { "opened" });
         self.niri.is_lid_closed = is_closed;
         self.backend.on_output_config_changed(&mut self.niri);
+
+        // With no external display the panel stays enabled behind a closed lid (so the session
+        // has an output): turn the monitors off instead, as if idle, when nothing suspended the
+        // machine (an inhibitor, or HandleLidSwitch=ignore). Opening the lid turns them back on
+        // if this turned them off (fork).
+        let keep_on = self
+            .niri
+            .config
+            .borrow()
+            .debug
+            .keep_laptop_panel_on_when_lid_is_closed;
+        if is_closed && !keep_on {
+            let only_panels = self
+                .niri
+                .global_space
+                .outputs()
+                .all(|output| crate::utils::is_laptop_panel(&output.name()));
+            if only_panels && self.niri.monitors_active {
+                self.niri.deactivate_monitors(&mut self.backend);
+                self.niri.monitors_off_for_lid = true;
+            }
+        } else if !is_closed && mem::take(&mut self.niri.monitors_off_for_lid) {
+            self.niri.activate_monitors(&mut self.backend);
+        }
     }
 
     fn refresh(&mut self) {
@@ -2546,6 +2572,7 @@ impl Niri {
             blocker_cleared_rx,
             monitors_active: true,
             is_lid_closed: false,
+            monitors_off_for_lid: false,
 
             devices: HashSet::new(),
             tablets: HashMap::new(),
@@ -4670,7 +4697,15 @@ impl Niri {
         // Freeze the clock at the target time.
         self.clock.set_unadjusted(target_presentation_time);
 
-        self.update_render_elements(Some(output));
+        // With the monitors off nothing is shown, so the elements only matter to a screencast
+        // still streaming (fork).
+        #[cfg(feature = "xdp-gnome-screencast")]
+        let casting = self.casting.casts.iter().any(|cast| cast.is_active());
+        #[cfg(not(feature = "xdp-gnome-screencast"))]
+        let casting = false;
+        if self.monitors_active || casting {
+            self.update_render_elements(Some(output));
+        }
 
         // An animated cursor (a wait or progress icon) only needs frames where it shows: not
         // while hidden by typing or inactivity, and not on the other outputs (fork).

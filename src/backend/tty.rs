@@ -1939,6 +1939,9 @@ impl Tty {
             target: RenderTarget::Output,
             xray: None,
         };
+        // what screencast, window-cast or screenshot renders noted since the last frame isn't
+        // this output's: start its hdr-auto note clean (fork)
+        crate::render_helpers::hdr::take_bright();
         let mut elements = niri.render_to_vec(ctx, output, true);
         if let Some(config) = self.config.borrow().outputs.find(&surface.name) {
             hdr::follow_content(config, &surface.name.connector, &niri.event_loop);

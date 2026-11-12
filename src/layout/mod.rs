@@ -5032,6 +5032,26 @@ impl<W: LayoutElement> Layout<W> {
         self.overview_open
     }
 
+    /// Whether `window` is on a workspace no output can show right now: not its monitor's
+    /// active one, with no workspace switch and no overview under way (fork). A commit from
+    /// such a window changes nothing on screen.
+    pub fn is_window_on_hidden_workspace(&self, window: &W::Id) -> bool {
+        if self.overview_open || self.overview_progress.is_some() {
+            return false;
+        }
+        let MonitorSet::Normal { monitors, .. } = &self.monitor_set else {
+            return false;
+        };
+        for mon in monitors {
+            for (idx, ws) in mon.workspaces.iter().enumerate() {
+                if ws.has_window(window) {
+                    return mon.workspace_switch.is_none() && idx != mon.active_workspace_idx;
+                }
+            }
+        }
+        false
+    }
+
     /// Global overview open/close progress: `0.0` closed, `1.0` fully open.
     ///
     /// Tracks the live value during the overview animation or gesture, matching what is rendered.

@@ -361,10 +361,13 @@ impl CompositorHandler for State {
                 // Popup placement depends on window size which might have changed.
                 self.update_reactive_popups(&window);
 
-                if let Some(output) = output {
+                // A window on a hidden workspace that isn't being cast shows nothing new (fork).
+                let moved = buffer_delta.is_some_and(|delta| delta.x != 0 || delta.y != 0);
+                let shows = moved || self.window_commit_may_show(&window);
+                if let Some(output) = output.filter(|_| shows) {
                     self.niri.queue_redraw(&output);
-                    self.niri.queue_redraw_mru_output();
                 }
+                self.niri.queue_redraw_mru_output();
                 return;
             }
 
@@ -381,10 +384,10 @@ impl CompositorHandler for State {
                 .window_mru_ui
                 .update_window(&self.niri.layout, mapped.id());
             self.niri.layout.update_window(&window, None);
-            if let Some(output) = output {
+            if let Some(output) = output.filter(|_| self.window_commit_may_show(&window)) {
                 self.niri.queue_redraw(&output);
-                self.niri.queue_redraw_mru_output();
             }
+            self.niri.queue_redraw_mru_output();
             return;
         }
 
@@ -527,6 +530,23 @@ delegate_compositor!(State);
 delegate_shm!(State);
 
 impl State {
+    /// Whether a commit from this mapped window can change what's on screen (fork): not when
+    /// it sits on a hidden workspace and no screencast renders it. Hidden windows still get
+    /// their frame callbacks from the fallback timer.
+    fn window_commit_may_show(&self, window: &smithay::desktop::Window) -> bool {
+        let Some(toplevel) = window.toplevel() else {
+            return true;
+        };
+        let Some((mapped, _)) = self
+            .niri
+            .layout
+            .find_window_and_output(toplevel.wl_surface())
+        else {
+            return true;
+        };
+        mapped.is_window_cast_target() || !self.niri.layout.is_window_on_hidden_workspace(window)
+    }
+
     pub fn add_default_dmabuf_pre_commit_hook(&mut self, surface: &WlSurface) {
         if !surface.is_alive() {
             error!("tried to add dmabuf pre-commit hook for a dead surface");

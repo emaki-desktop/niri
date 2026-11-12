@@ -1,4 +1,5 @@
 use smithay::delegate_layer_shell;
+use smithay::desktop::utils::surface_primary_scanout_output;
 use smithay::desktop::{layer_map_for_output, LayerSurface, PopupKind, WindowSurfaceType};
 use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -103,10 +104,14 @@ impl State {
         }
 
         let mut map = layer_map_for_output(&output);
+        let zone_before = map.non_exclusive_zone();
 
         // Arrange the layers before sending the initial configure to respect any size the
         // client may have sent.
-        map.arrange();
+        let arranged = map.arrange();
+        // Whether this commit moved or resized a layer or changed the exclusive zone, which the
+        // layout's working area follows (fork).
+        let mut relayout = arranged || map.non_exclusive_zone() != zone_before;
 
         let layer = map
             .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
@@ -114,6 +119,7 @@ impl State {
 
         if is_mapped(surface) {
             let was_unmapped = self.niri.unmapped_layer_surfaces.remove(surface);
+            relayout |= was_unmapped;
 
             // Resolve rules for newly mapped layer surfaces.
             if was_unmapped {
@@ -148,6 +154,7 @@ impl State {
                 if let Some(mapped) = self.niri.mapped_layer_surfaces.get_mut(layer) {
                     // Check if the layer changed.
                     if mapped.take_recompute_rules_on_commit() {
+                        relayout = true;
                         let config = self.niri.config.borrow();
                         if mapped
                             .recompute_layer_rules(&config.layer_rules, self.niri.is_at_startup)
@@ -182,6 +189,7 @@ impl State {
             }
         } else {
             // The surface is unmapped.
+            relayout = true;
             if self.niri.mapped_layer_surfaces.remove(layer).is_some() {
                 // A mapped surface got unmapped via a null commit. Now it needs to do a new
                 // initial commit again.
@@ -214,8 +222,17 @@ impl State {
 
         drop(map);
 
-        // This will call queue_redraw() inside.
-        self.niri.output_resized(&output);
+        if relayout {
+            // This will call queue_redraw() inside.
+            self.niri.output_resized(&output);
+        } else if with_states(surface, |states| {
+            surface_primary_scanout_output(surface, states).is_some()
+        }) {
+            // Only its content changed: a redraw, and only if it's shown somewhere (fork). A
+            // layer under a fullscreen window or behind no glass gets its frame callbacks from
+            // the fallback timer.
+            self.niri.queue_redraw(&output);
+        }
 
         true
     }

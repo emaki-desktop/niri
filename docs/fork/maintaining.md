@@ -271,3 +271,8 @@ comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
 | `7d641a9a` | [power](display/power.md) | no element work with the monitors off; a lid closed with no external display turns the monitors off |
 | `0bf3eaa1` | [power](display/power.md) | the activation-token sweep and the 1 s fallback timer armed only when needed |
 | `a7fda44f` | [background apps](ipc/background-apps.md) | Introspect's `GetRunningApplications` and `RunningApplicationsChanged`, with the Flatpak app id from the security context |
+| `44e5c208` | [power](display/power.md) | no per-iteration copies for the fork's IPC refreshes; the Tracy vblank message only with Tracy |
+| `2167afb1` | [power](display/power.md) | glass reports the backdrop's real damage (`XrayElement::damage_since`, a `DamageBag` in `EffectBuffer`) |
+| `0585d391` | [power](display/power.md) | a re-blur redoes only the region that changed (scissored levels) |
+| `e4c97e8e` | [power](display/power.md) | windows nothing can show get xdg-shell's `suspended` state |
+| `4945c7dd` | [power](display/power.md) | BT.1886 SDR video with sRGB primaries draws as is |

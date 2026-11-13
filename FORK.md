@@ -21,6 +21,7 @@ stock niri.
 - **Features:** the `Features` request, which of these the running niri has; stock niri answers with an error.
 - **Wallpaper dim:** the `SetWallpaperDim` IPC action, the wallpaper dimmed or not drawn over a black backdrop, for OLED panels; see [power.md](docs/fork/display/power.md).
 - **Config watcher:** the config and its includes watched with inotify instead of polled twice a second; see [power.md](docs/fork/display/power.md#config-watcher).
+- **Power:** glass damaged only where its backdrop changed, scissored re-blurs, no redraws for commits nothing shows, `suspended` for windows on hidden workspaces, a closed lid turning the panel off, on-demand timers; see [power.md](docs/fork/display/power.md#damage-redraws-and-wakeups-the-fork-cuts).
 - **HDR:** HDR10 output (`hdr`, `hdr-auto`, `sdr-brightness`) with the SDR desktop unchanged, and color-managed HDR surfaces through `wp-color-management-v1`.
 
 ## Branch and base

@@ -602,6 +602,11 @@ pub fn configure_lock_surface(surface: &LockSurface, output: &Output) {
 
 impl SecurityContextHandler for State {
     fn context_created(&mut self, source: SecurityContextListenerSource, context: SecurityContext) {
+        // Flatpak's app id, for the background-apps portal through Introspect (fork)
+        let sandboxed_app_id = context
+            .app_id
+            .clone()
+            .filter(|_| context.sandbox_engine.as_deref() == Some("org.flatpak"));
         self.niri
             .event_loop
             .insert_source(source, move |client, _, state| {
@@ -610,6 +615,7 @@ impl SecurityContextHandler for State {
                     client,
                     restricted: true,
                     credentials_unknown: false,
+                    sandboxed_app_id: sandboxed_app_id.clone(),
                 });
             })
             .unwrap();

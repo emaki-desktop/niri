@@ -101,6 +101,7 @@ impl Fixture {
             client: sock1,
             restricted: false,
             credentials_unknown: false,
+            sandboxed_app_id: None,
         });
 
         let client = Client::new(sock2);

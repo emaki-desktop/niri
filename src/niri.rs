@@ -274,6 +274,12 @@ pub struct Niri {
     pub fallback_timer_armed: bool,
     /// Whether the activation-token sweep is armed; it runs only while tokens remain (fork).
     pub activation_sweep_armed: bool,
+    /// What the running apps were checked against last: window count, ids, focus (fork).
+    #[cfg(feature = "dbus")]
+    pub running_apps_key: Option<(u64, u64, Option<u64>)>,
+    /// The running apps Introspect last announced (fork).
+    #[cfg(feature = "dbus")]
+    pub running_apps: Vec<(String, gnome_shell_introspect::ApplicationProperties)>,
 
     pub devices: HashSet<input::Device>,
     pub tablets: HashMap<input::Device, TabletData>,
@@ -871,6 +877,8 @@ impl State {
         // Needs to be called after updating the keyboard focus.
         #[cfg(feature = "dbus")]
         self.niri.refresh_a11y();
+        #[cfg(feature = "dbus")]
+        self.refresh_running_applications();
     }
 
     fn notify_blocker_cleared(&mut self) {
@@ -2216,7 +2224,14 @@ impl State {
     ) {
         use crate::utils::with_toplevel_role;
 
-        let IntrospectToNiri::GetWindows = msg;
+        if let IntrospectToNiri::GetRunningApplications = msg {
+            let apps = self.niri.running_applications();
+            let msg = NiriToIntrospect::RunningApplications(apps.into_iter().collect());
+            if let Err(err) = to_introspect.send_blocking(msg) {
+                warn!("error sending running applications to introspect: {err:?}");
+            }
+            return;
+        }
         let _span = tracy_client::span!("GetWindows");
 
         let mut windows = HashMap::new();
@@ -2252,6 +2267,55 @@ impl State {
         let msg = NiriToIntrospect::Windows(windows);
         if let Err(err) = to_introspect.send_blocking(msg) {
             warn!("error sending windows to introspect: {err:?}");
+        }
+    }
+
+    /// Tells Introspect's listeners when the running apps changed (fork): checked against the
+    /// mapped windows and the focus, which are cheap to compare; the app ids are only read when
+    /// those changed.
+    #[cfg(feature = "dbus")]
+    pub fn refresh_running_applications(&mut self) {
+        let focus = self.niri.layout.focus().map(|mapped| mapped.id().get());
+        let mut ids: u64 = 0;
+        let mut count: u64 = 0;
+        self.niri.layout.with_windows(|mapped, _, _, _| {
+            let id = mapped.id().get();
+            ids = ids.wrapping_add(id.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+            count += 1;
+        });
+        let key = (count, ids, focus);
+        if self.niri.running_apps_key == Some(key) {
+            return;
+        }
+        self.niri.running_apps_key = Some(key);
+
+        let apps = self.niri.running_applications();
+        if apps == self.niri.running_apps {
+            return;
+        }
+        self.niri.running_apps = apps;
+
+        let Some(conn) = self
+            .niri
+            .dbus
+            .as_ref()
+            .and_then(|d| d.conn_introspect.as_ref())
+        else {
+            return;
+        };
+        let server = conn.object_server();
+        if let Ok(iface) =
+            server.interface::<_, gnome_shell_introspect::Introspect>("/org/gnome/Shell/Introspect")
+        {
+            let _span = tracy_client::span!("RunningApplicationsChanged");
+            let emitter = iface.signal_emitter().clone();
+            async_io::block_on(async move {
+                if let Err(err) =
+                    gnome_shell_introspect::Introspect::running_applications_changed(&emitter).await
+                {
+                    warn!("error emitting RunningApplicationsChanged: {err:?}");
+                }
+            });
         }
     }
 
@@ -2490,6 +2554,7 @@ impl Niri {
                         client,
                         restricted: false,
                         credentials_unknown: false,
+                        sandboxed_app_id: None,
                     });
                 })
                 .unwrap();
@@ -2563,6 +2628,10 @@ impl Niri {
             monitors_off_for_lid: false,
             fallback_timer_armed: true,
             activation_sweep_armed: false,
+            #[cfg(feature = "dbus")]
+            running_apps_key: None,
+            #[cfg(feature = "dbus")]
+            running_apps: Vec::new(),
 
             devices: HashSet::new(),
             tablets: HashMap::new(),
@@ -2691,6 +2760,7 @@ impl Niri {
             client,
             restricted,
             credentials_unknown,
+            sandboxed_app_id,
         } = client;
 
         let config = self.config.borrow();
@@ -2700,6 +2770,7 @@ impl Niri {
             primary_selection_disabled: config.clipboard.disable_primary,
             restricted,
             credentials_unknown,
+            sandboxed_app_id,
         });
 
         if let Err(err) = self.display_handle.insert_client(client, data) {
@@ -5244,6 +5315,39 @@ impl Niri {
             .unwrap();
     }
 
+    /// The apps with a mapped window, by .desktop id, as gnome-shell's Introspect says them
+    /// (fork); sorted, so two lists compare equal when the apps are the same.
+    #[cfg(feature = "dbus")]
+    pub fn running_applications(
+        &self,
+    ) -> Vec<(String, gnome_shell_introspect::ApplicationProperties)> {
+        use crate::utils::with_toplevel_role;
+
+        let focus = self.layout.focus().map(|mapped| mapped.id());
+        let mut apps: std::collections::BTreeMap<
+            String,
+            gnome_shell_introspect::ApplicationProperties,
+        > = std::collections::BTreeMap::new();
+        self.layout.with_windows(|mapped, _, _, _| {
+            let Some(app_id) = with_toplevel_role(mapped.toplevel(), |role| role.app_id.clone())
+            else {
+                return;
+            };
+            let surface = mapped.toplevel().wl_surface();
+            let sandboxed = surface
+                .client()
+                .and_then(|client| client.get_data::<ClientState>()?.sandboxed_app_id.clone());
+            let app = apps.entry(format!("{app_id}.desktop")).or_default();
+            if app.sandboxed_app_id.is_none() {
+                app.sandboxed_app_id = sandboxed;
+            }
+            if focus == Some(mapped.id()) {
+                app.active_on_seats = Some(vec![String::from("seat0")]);
+            }
+        });
+        apps.into_iter().collect()
+    }
+
     pub fn send_frame_callbacks_on_fallback_timer(&mut self) {
         if !self.monitors_active || self.output_state.is_empty() {
             return;
@@ -6612,6 +6716,8 @@ pub struct NewClient {
     pub client: UnixStream,
     pub restricted: bool,
     pub credentials_unknown: bool,
+    /// The Flatpak app id of a client connecting through a security context (fork).
+    pub sandboxed_app_id: Option<String>,
 }
 
 pub struct ClientState {
@@ -6622,6 +6728,9 @@ pub struct ClientState {
     pub restricted: bool,
     /// We cannot retrieve this client's socket credentials.
     pub credentials_unknown: bool,
+    /// The Flatpak app id, for a client that connected through a Flatpak security context
+    /// (fork): what org.gnome.Shell.Introspect reports as `sandboxed-app-id`.
+    pub sandboxed_app_id: Option<String>,
 }
 
 impl ClientData for ClientState {

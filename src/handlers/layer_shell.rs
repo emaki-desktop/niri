@@ -1,5 +1,4 @@
 use smithay::delegate_layer_shell;
-use smithay::desktop::utils::surface_primary_scanout_output;
 use smithay::desktop::{layer_map_for_output, LayerSurface, PopupKind, WindowSurfaceType};
 use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -225,12 +224,12 @@ impl State {
         if relayout {
             // This will call queue_redraw() inside.
             self.niri.output_resized(&output);
-        } else if with_states(surface, |states| {
-            surface_primary_scanout_output(surface, states).is_some()
-        }) {
-            // Only its content changed: a redraw, and only if it's shown somewhere (fork). A
-            // layer under a fullscreen window or behind no glass gets its frame callbacks from
-            // the fallback timer.
+        } else {
+            // Only its content changed: a redraw, no relayout (fork). Not gated on the surface
+            // having a primary output: that comes from the last frame's render states, and a
+            // layer that showed nothing last frame (an auto-hidden bar slid all the way out,
+            // drawing into its own fixed-size surface) would never get the redraw that shows
+            // it again.
             self.niri.queue_redraw(&output);
         }
 

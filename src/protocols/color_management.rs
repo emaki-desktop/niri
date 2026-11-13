@@ -307,9 +307,14 @@ impl ImageDescription {
     }
 
     /// How a surface with it is drawn: `None` for what niri draws as is, gamma-2.2-like sRGB.
+    ///
+    /// BT.1886 (power 2.4) SDR video with sRGB primaries is drawn as is too, as desktops without
+    /// color management always showed it: converting it costs the surface direct scanout (and an
+    /// overlay plane) for a slight change in shadows, through the whole of every video (fork).
     pub fn params(&self) -> Option<ColorParams> {
         let plain_curve = matches!(self.transfer, Transfer::Srgb)
-            || matches!(self.transfer, Transfer::Power(g) if (g - 2.2).abs() < 0.01);
+            || matches!(self.transfer, Transfer::Power(g) if (g - 2.2).abs() < 0.01)
+            || matches!(self.transfer, Transfer::Power(g) if (g - 2.4).abs() < 0.01);
         let scale = match self.transfer {
             Transfer::Pq => 10000. / self.luminance.reference,
             _ => self.luminance.max / self.luminance.reference,
@@ -1250,5 +1255,25 @@ mod tests {
         let scrgb = ImageDescription::windows_scrgb().params().unwrap();
         assert_eq!(scrgb.tf, 3.);
         assert!((scrgb.scale - 80. / 203.).abs() < 1e-4);
+    }
+
+    #[test]
+    fn bt1886_sdr_video_draws_as_is_unless_wide_gamut() {
+        let bt1886 = ImageDescription {
+            identity: 0,
+            transfer: Transfer::Power(2.4),
+            primaries: Primaries::SRGB,
+            luminance: Transfer::Power(2.4).default_luminance(),
+            mastering: None,
+            max_cll: None,
+            max_fall: None,
+            info: false,
+        };
+        assert_eq!(bt1886.params(), None);
+        let wide = ImageDescription {
+            primaries: Primaries::BT2020,
+            ..bt1886
+        };
+        assert!(wide.params().is_some());
     }
 }

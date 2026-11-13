@@ -5,7 +5,7 @@ use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::damage::OutputDamageTracker;
 use smithay::backend::renderer::element::{Id, RenderElementStates};
 use smithay::backend::renderer::gles::{GlesFrame, GlesRenderer, GlesTexture};
-use smithay::backend::renderer::utils::CommitCounter;
+use smithay::backend::renderer::utils::{CommitCounter, DamageBag, DamageSet};
 use smithay::backend::renderer::{
     Bind as _, Color32F, ContextId, FrameContext as _, Offscreen as _, Renderer as _, Texture,
 };
@@ -13,6 +13,10 @@ use smithay::utils::{Buffer, Logical, Physical, Rectangle, Scale, Size, Transfor
 
 use crate::niri::OutputRenderElements;
 use crate::render_helpers::blur::{Blur, BlurOptions};
+
+/// How many commits of damage [`EffectBuffer`] keeps; an element asking about an older one
+/// gets full damage.
+const DAMAGE_HISTORY: usize = 16;
 
 #[derive(Debug)]
 pub struct EffectBuffer {
@@ -36,8 +40,10 @@ pub struct EffectBuffer {
     /// than `blur {}`, most recently asked for last.
     variants: Vec<Variant>,
 
-    /// Commit counter that takes into account both original and blurred texture changes.
-    commit_counter: CommitCounter,
+    /// Where the buffer changed, by commit, in buffer pixels (fork): the contents re-rendered
+    /// there, or all of it for anything else (blur options, release, scale). The commit counter
+    /// takes into account both original and blurred texture changes.
+    damage: DamageBag<i32, Buffer>,
 
     /// Frames [`tick`](Self::tick)ed so far, and at which the buffer was last prepared and its
     /// own blur last asked for; a tick lets go of what wasn't for a while.
@@ -141,8 +147,7 @@ impl Stale {
         if *REBLUR_ALL {
             return false;
         }
-        // dual kawase reaches about offset · 2^(passes + 1) pixels; kept wide on purpose
-        let reach = (options.offset * f64::from(1u32 << (options.passes + 1))).ceil() + 2.;
+        let reach = blur_reach(options);
         let mut near = area;
         near.loc.x -= reach;
         near.loc.y -= reach;
@@ -170,7 +175,7 @@ impl EffectBuffer {
             offscreen: None,
             blur: None,
             variants: Vec::new(),
-            commit_counter: CommitCounter::default(),
+            damage: DamageBag::new(DAMAGE_HISTORY),
             frame: 0,
             used_at: 0,
             blur_used_at: 0,
@@ -199,7 +204,7 @@ impl EffectBuffer {
         self.offscreen = None;
         self.blur = None;
         self.variants.clear();
-        self.commit_counter.increment();
+        self.damage_all();
     }
 
     /// Counts a frame, and lets go of what hasn't been used for [`IDLE_FRAMES`]: variants
@@ -233,8 +238,23 @@ impl EffectBuffer {
         }
     }
 
+    pub fn blur_options(&self) -> BlurOptions {
+        self.blur_options
+    }
+
     pub fn commit(&self) -> CommitCounter {
-        self.commit_counter
+        self.damage.current_commit()
+    }
+
+    /// Where the buffer changed since `commit`, in buffer pixels; `None` for all of it (fork).
+    pub fn damage_since(&self, commit: Option<CommitCounter>) -> Option<DamageSet<i32, Buffer>> {
+        self.damage.damage_since(commit)
+    }
+
+    /// All of it changed: a new commit that damages the whole buffer.
+    fn damage_all(&mut self) {
+        let size = self.size;
+        self.damage.add([Rectangle::from_size(size)]);
     }
 
     pub fn logical_size(&self) -> Size<f64, Logical> {
@@ -264,7 +284,7 @@ impl EffectBuffer {
         if let Some(offscreen) = &mut self.offscreen {
             if offscreen.blurred.is_some() {
                 offscreen.blurred = None;
-                self.commit_counter.increment();
+                self.damage_all();
             }
         }
     }
@@ -443,9 +463,9 @@ impl EffectBuffer {
             let buffer_size = self.size.to_logical(1, Transform::Normal).to_physical(1);
             offscreen.damage = OutputDamageTracker::new(buffer_size, self.scale, Transform::Normal);
 
-            self.commit_counter.increment();
             offscreen.blurred = None;
             unblur(&mut self.variants);
+            self.damage.add([Rectangle::from_size(self.size)]);
         }
 
         // Render the elements if any.
@@ -471,7 +491,13 @@ impl EffectBuffer {
         offscreen.states = res.states;
 
         if let Some(damage) = res.damage {
-            self.commit_counter.increment();
+            // the tracker renders at scale 1 with no transform: physical is buffer pixels
+            self.damage.add(damage.iter().map(|rect| {
+                Rectangle::<i32, Buffer>::new(
+                    (rect.loc.x, rect.loc.y).into(),
+                    (rect.size.w, rect.size.h).into(),
+                )
+            }));
 
             // Original texture changed: each blur is made again where it's next asked for near
             // the change (Stale), and stays for areas the change doesn't reach.
@@ -603,6 +629,12 @@ impl EffectBuffer {
 
         Ok(offscreen.blurred.insert(blurred).clone())
     }
+}
+
+/// How far a change spreads through a blur with `options`, in buffer pixels: dual kawase
+/// reaches about offset · 2^(passes + 1); kept wide on purpose (fork).
+pub fn blur_reach(options: BlurOptions) -> f64 {
+    (options.offset * f64::from(1u32 << (options.passes + 1))).ceil() + 2.
 }
 
 /// Drops the variants' blurred textures, for contents that changed.

@@ -8,7 +8,7 @@ use smithay::backend::renderer::element::{Element, Id, RenderElement};
 use smithay::backend::renderer::gles::{
     GlesError, GlesFrame, GlesRenderer, GlesTexProgram, Uniform,
 };
-use smithay::backend::renderer::utils::{CommitCounter, OpaqueRegions};
+use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions};
 use smithay::backend::renderer::Color32F;
 use smithay::utils::user_data::UserDataMap;
 use smithay::utils::{Buffer, Logical, Physical, Point, Rectangle, Scale, Size, Transform};
@@ -16,7 +16,7 @@ use smithay::utils::{Buffer, Logical, Physical, Point, Rectangle, Scale, Size, T
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
 use crate::render_helpers::background_effect::{glass_uniforms, RenderParams};
 use crate::render_helpers::blur::BlurOptions;
-use crate::render_helpers::effect_buffer::EffectBuffer;
+use crate::render_helpers::effect_buffer::{blur_reach, EffectBuffer};
 use crate::render_helpers::renderer::AsGlesFrame as _;
 use crate::render_helpers::shaders::{mat3_uniform, Shaders};
 use crate::render_helpers::{RenderCtx, RenderTarget};
@@ -387,6 +387,61 @@ impl Element for XrayElement {
         self.buffer.borrow().commit()
     }
 
+    /// Only where the backdrop changed near what this element samples (fork): a desktop
+    /// widget ticking under a corner of a large glass window used to damage all of it.
+    fn damage_since(
+        &self,
+        scale: Scale<f64>,
+        commit: Option<CommitCounter>,
+    ) -> DamageSet<i32, Physical> {
+        let geometry = self.geometry(scale);
+        let full = || DamageSet::from_slice(&[Rectangle::from_size(geometry.size)]);
+
+        let buffer = self.buffer.borrow();
+        let Some(damage) = buffer.damage_since(commit) else {
+            return full();
+        };
+        if damage.is_empty() || self.src.size.w <= 0. || self.src.size.h <= 0. {
+            return damage_set_physical(&[]);
+        }
+
+        // How far a change in the backdrop moves the pixels drawn from it: the blur's reach,
+        // plus how far the glass refracts and disperses, in buffer pixels.
+        let mut reach = 2.;
+        if self.blur {
+            reach += blur_reach(self.blur_options.unwrap_or(buffer.blur_options()));
+        }
+        if let Some(material) = &self.material {
+            let shift = f64::from(material.refraction) * (1. + f64::from(material.dispersion));
+            reach += (shift + 4.) * buffer.scale().x;
+        }
+        drop(buffer);
+
+        let to_geo = Scale::from((
+            f64::from(geometry.size.w) / self.src.size.w,
+            f64::from(geometry.size.h) / self.src.size.h,
+        ));
+        let mut rects: Vec<Rectangle<i32, Physical>> = Vec::with_capacity(damage.len());
+        for rect in damage.iter() {
+            let mut near = rect.to_f64();
+            near.loc.x -= reach;
+            near.loc.y -= reach;
+            near.size.w += 2. * reach;
+            near.size.h += 2. * reach;
+            let Some(hit) = near.intersection(self.src) else {
+                continue;
+            };
+            // into the element's own coordinates, scaled from its src to its geometry
+            let loc = hit.loc - self.src.loc;
+            let rel = Rectangle::<f64, Physical>::new(
+                (loc.x * to_geo.x, loc.y * to_geo.y).into(),
+                (hit.size.w * to_geo.x, hit.size.h * to_geo.y).into(),
+            );
+            rects.push(rel.to_i32_up());
+        }
+        damage_set_physical(&rects)
+    }
+
     fn src(&self) -> Rectangle<f64, Buffer> {
         self.src
     }
@@ -490,4 +545,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for XrayElement {
         )?;
         Ok(())
     }
+}
+
+fn damage_set_physical(rects: &[Rectangle<i32, Physical>]) -> DamageSet<i32, Physical> {
+    DamageSet::from_slice(rects)
 }

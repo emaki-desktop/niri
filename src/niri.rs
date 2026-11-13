@@ -4152,8 +4152,15 @@ impl Niri {
         let _span = tracy_client::span!("Niri::refresh_window_states");
 
         let config = self.config.borrow();
-        self.layout.with_windows_mut(|mapped, _output| {
+        // Suspended (xdg-shell v6) for windows nothing can show: on a hidden workspace, or all of
+        // them with the monitors off; never one being cast, nor while the window switcher shows
+        // thumbnails. Clients stop animating and rendering until it's lifted (fork).
+        let all_hidden = !self.monitors_active;
+        let switcher = self.window_mru_ui.is_open();
+        self.layout.with_windows_mut_hidden(|mapped, hidden| {
             mapped.update_tiled_state(config.prefer_no_csd);
+            let suspend = (all_hidden || hidden) && !switcher && !mapped.is_window_cast_target();
+            mapped.set_suspended(suspend);
         });
         drop(config);
     }

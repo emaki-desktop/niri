@@ -590,6 +590,18 @@ impl Mapped {
         self.window.send_frame(output, time, throttle, should_send);
     }
 
+    /// Sets or lifts xdg-shell's `suspended` state, sent with the next configure (fork). A
+    /// client older than xdg-shell v6 never sees it.
+    pub fn set_suspended(&self, suspended: bool) {
+        self.toplevel().with_pending_state(|state| {
+            if suspended {
+                state.states.set(xdg_toplevel::State::Suspended);
+            } else {
+                state.states.unset(xdg_toplevel::State::Suspended);
+            }
+        });
+    }
+
     pub fn update_tiled_state(&self, prefer_no_csd: bool) {
         update_tiled_state(self.toplevel(), prefer_no_csd, self.rules.tiled_state);
     }

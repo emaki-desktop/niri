@@ -1735,6 +1735,39 @@ impl<W: LayoutElement> Layout<W> {
         }
     }
 
+    /// Like [`with_windows_mut`](Self::with_windows_mut), also saying whether each window is
+    /// on a workspace no output can show right now (see
+    /// [`is_window_on_hidden_workspace`](Self::is_window_on_hidden_workspace)) (fork).
+    pub fn with_windows_mut_hidden(&mut self, mut f: impl FnMut(&mut W, bool)) {
+        let overview = self.overview_open || self.overview_progress.is_some();
+        if let Some(InteractiveMoveState::Moving(move_)) = &mut self.interactive_move {
+            f(move_.tile.window_mut(), false);
+        }
+
+        match &mut self.monitor_set {
+            MonitorSet::Normal { monitors, .. } => {
+                for mon in monitors {
+                    let switching = mon.workspace_switch.is_some();
+                    let active = mon.active_workspace_idx;
+                    for (idx, ws) in mon.workspaces.iter_mut().enumerate() {
+                        let hidden = !overview && !switching && idx != active;
+                        for win in ws.windows_mut() {
+                            f(win, hidden);
+                        }
+                    }
+                }
+            }
+            // with no outputs nothing shows anyway; left as upstream, unsuspended
+            MonitorSet::NoOutputs { workspaces } => {
+                for ws in workspaces {
+                    for win in ws.windows_mut() {
+                        f(win, false);
+                    }
+                }
+            }
+        }
+    }
+
     fn active_monitor(&mut self) -> Option<&mut Monitor<W>> {
         let MonitorSet::Normal {
             monitors,

@@ -567,7 +567,7 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
             if let Some((blur, options)) = blur {
                 let mut guard = frame.renderer();
                 let renderer = guard.as_mut();
-                match blur.render(renderer, framebuffer, options) {
+                match blur.render(renderer, framebuffer, options, None) {
                     Ok(blurred) => inner.intermediate = Some(blurred),
                     Err(err) => {
                         warn!("error rendering blur: {err:?}");

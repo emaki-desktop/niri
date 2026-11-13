@@ -7,7 +7,7 @@ use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::gles::{ffi, link_program, GlesError, GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{ContextId, Renderer as _, Texture as _};
 use smithay::gpu_span_location;
-use smithay::utils::{Buffer, Size};
+use smithay::utils::{Buffer, Rectangle, Size};
 
 use crate::render_helpers::shaders::Shaders;
 
@@ -20,6 +20,9 @@ pub struct Blur {
     ///
     /// Created lazily and stored here to avoid recreating blur textures frequently.
     textures: Vec<GlesTexture>,
+    /// The source texture and options the textures last held a whole blur of (fork): a later
+    /// render of the same may redo only a region, the rest still being right.
+    made: Option<(u32, BlurOptions)>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -112,6 +115,7 @@ impl Blur {
             program,
             renderer_context_id: renderer.context_id(),
             textures: Vec::new(),
+            made: None,
         })
     }
 
@@ -129,6 +133,7 @@ impl Blur {
 
         let passes = options.passes.clamp(1, 31) as usize;
         let size = source.size();
+        let before = self.textures.len();
 
         if let Some(output) = self.textures.first_mut() {
             let old_size = output.size();
@@ -141,11 +146,13 @@ impl Blur {
                     size.h
                 );
                 self.textures.clear();
+                self.made = None;
             } else if !output.is_unique_reference() {
                 debug!("recreating textures: not unique",);
                 // We only need to recreate the output texture here, but this case shouldn't really
                 // happen anyway, and this is simpler.
                 self.textures.clear();
+                self.made = None;
             }
         }
 
@@ -172,6 +179,11 @@ impl Blur {
         // Drop any no longer needed textures.
         self.textures.drain(passes + 1..);
 
+        // new or different textures hold no blur yet
+        if self.textures.len() != before || before == 0 {
+            self.made = None;
+        }
+
         Ok(())
     }
 
@@ -180,6 +192,7 @@ impl Blur {
         renderer: &mut GlesRenderer,
         source: &GlesTexture,
         options: BlurOptions,
+        region: Option<Rectangle<i32, Buffer>>,
     ) -> anyhow::Result<GlesTexture> {
         let _span = tracy_client::span!("Blur::render");
         trace!("rendering blur");
@@ -210,6 +223,31 @@ impl Blur {
             output.is_unique_reference(),
             "output texture has a non-unique reference"
         );
+
+        // Only `region` (in source pixels, already widened by the blur's reach) changed since
+        // the last whole blur of this source with these options: every level is redone only
+        // there, and keeps elsewhere what it held, which is still right (fork).
+        let made = Some((source.tex_id(), options));
+        let region = region
+            .filter(|_| self.made == made)
+            .and_then(|region| region.intersection(Rectangle::from_size(size)));
+        let full = size;
+        let scissor = |level: Size<i32, Buffer>| -> Option<[i32; 4]> {
+            let region = region?;
+            let sx = f64::from(level.w) / f64::from(full.w);
+            let sy = f64::from(level.h) / f64::from(full.h);
+            let x0 = ((f64::from(region.loc.x) * sx).floor() as i32 - 1).max(0);
+            let y0 = ((f64::from(region.loc.y) * sy).floor() as i32 - 1).max(0);
+            let x1 =
+                ((f64::from(region.loc.x + region.size.w) * sx).ceil() as i32 + 1).min(level.w);
+            let y1 =
+                ((f64::from(region.loc.y + region.size.h) * sy).ceil() as i32 + 1).min(level.h);
+            Some([x0, y0, (x1 - x0).max(0), (y1 - y0).max(0)])
+        };
+        let mut scissors = Vec::with_capacity(self.textures.len());
+        for texture in &self.textures {
+            scissors.push(scissor(texture.size()));
+        }
 
         renderer.with_profiled_context(gpu_span_location!("Blur::render"), |gl| unsafe {
             while gl.GetError() != ffi::NO_ERROR {}
@@ -242,11 +280,12 @@ impl Blur {
 
             let src = once(source).chain(&self.textures[1..]);
             let dst = &self.textures[1..];
-            for (src, dst) in zip(src, dst) {
+            for ((src, dst), scissor) in zip(zip(src, dst), &scissors[1..]) {
                 let dst_size = dst.size();
                 let w = dst_size.w;
                 let h = dst_size.h;
                 gl.Viewport(0, 0, w, h);
+                set_scissor(gl, *scissor);
 
                 // During downsampling, half_pixel is half of the destination pixel.
                 gl.Uniform2f(program.uniform_half_pixel, 0.5 / w as f32, 0.5 / h as f32);
@@ -302,11 +341,13 @@ impl Blur {
 
             let src = self.textures.iter().rev();
             let dst = self.textures.iter().rev().skip(1);
-            for (src, dst) in zip(src, dst) {
+            let dst_scissors = scissors.iter().rev().skip(1);
+            for ((src, dst), scissor) in zip(zip(src, dst), dst_scissors) {
                 let dst_size = dst.size();
                 let w = dst_size.w;
                 let h = dst_size.h;
                 gl.Viewport(0, 0, w, h);
+                set_scissor(gl, *scissor);
 
                 // During upsampling, half_pixel is half of the source pixel.
                 let src_size = src.size();
@@ -345,11 +386,26 @@ impl Blur {
 
             gl.DisableVertexAttribArray(program.attrib_vert as u32);
 
+            gl.Disable(ffi::SCISSOR_TEST);
             gl.BindFramebuffer(ffi::DRAW_FRAMEBUFFER, 0);
             gl.DeleteFramebuffers(fbos.len() as _, fbos.as_ptr());
         })?;
+        // a whole blur of this source now, or one kept whole by the region redone
+        self.made = made;
 
         Ok(self.textures[0].clone())
+    }
+}
+
+/// Limits the next draws to `scissor` (x, y, w, h in the target's pixels; row 0 is the
+/// buffer's first row, as smithay renders into textures), or lets them cover it all (fork).
+unsafe fn set_scissor(gl: &ffi::Gles2, scissor: Option<[i32; 4]>) {
+    match scissor {
+        Some([x, y, w, h]) => {
+            gl.Enable(ffi::SCISSOR_TEST);
+            gl.Scissor(x, y, w, h);
+        }
+        None => gl.Disable(ffi::SCISSOR_TEST),
     }
 }
 

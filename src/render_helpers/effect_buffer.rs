@@ -133,18 +133,29 @@ impl Stale {
         }
     }
 
+    /// The bounding box of what changed, widened by the blur's reach: all a blur made again
+    /// has to redo (fork). `None` with nothing recorded, or with `NIRI_REBLUR_ALL=1`.
+    fn region(&self, options: BlurOptions) -> Option<Rectangle<i32, Buffer>> {
+        if reblur_all() {
+            return None;
+        }
+        let all = self.rects.iter().copied().reduce(|a, b| a.merge(b))?;
+        let reach = blur_reach(options).ceil() as i32;
+        Some(Rectangle::new(
+            (all.loc.x - reach, all.loc.y - reach).into(),
+            (all.size.w + 2 * reach, all.size.h + 2 * reach).into(),
+        ))
+    }
+
     /// Whether a blur still shows `area` as it is: nothing changed within the blur's reach of it.
     fn still_shows(&self, area: Option<Rectangle<f64, Buffer>>, options: BlurOptions) -> bool {
-        static REBLUR_ALL: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-            std::env::var_os("NIRI_REBLUR_ALL").is_some_and(|v| v == "1")
-        });
         if self.rects.is_empty() {
             return true;
         }
         let Some(area) = area else {
             return false;
         };
-        if *REBLUR_ALL {
+        if reblur_all() {
             return false;
         }
         let reach = blur_reach(options);
@@ -589,6 +600,13 @@ impl EffectBuffer {
                     return Ok(texture.clone());
                 }
             }
+            // what changed since the last blur, widened by its reach, if there was one: only
+            // that is blurred again (fork)
+            let region = variant
+                .blurred
+                .is_some()
+                .then(|| variant.stale.region(variant.options))
+                .flatten();
             variant.stale = Stale::default();
             // the old blur is a clone of the chain's output texture: drop it, or the chain
             // can't render into it (Blur::render wants the only reference)
@@ -597,7 +615,7 @@ impl EffectBuffer {
             let renderer = guard.as_mut();
             let blurred = variant
                 .blur
-                .render(renderer, &offscreen.texture, variant.options)
+                .render(renderer, &offscreen.texture, variant.options, region)
                 .context("error rendering blur variant")?;
             return Ok(variant.blurred.insert(blurred).clone());
         }
@@ -607,6 +625,11 @@ impl EffectBuffer {
                 return Ok(texture.clone());
             }
         }
+        let region = offscreen
+            .blurred
+            .is_some()
+            .then(|| offscreen.stale.region(self.blur_options))
+            .flatten();
         offscreen.stale = Stale::default();
         // as for a variant above: the chain renders into the texture this holds
         offscreen.blurred = None;
@@ -624,11 +647,18 @@ impl EffectBuffer {
         let mut guard = frame.renderer();
         let renderer = guard.as_mut();
         let blurred = blur
-            .render(renderer, &offscreen.texture, self.blur_options)
+            .render(renderer, &offscreen.texture, self.blur_options, region)
             .context("error rendering blur")?;
 
         Ok(offscreen.blurred.insert(blurred).clone())
     }
+}
+
+/// `NIRI_REBLUR_ALL=1`: every change blurs the whole buffer again, as before (fork).
+fn reblur_all() -> bool {
+    static REBLUR_ALL: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var_os("NIRI_REBLUR_ALL").is_some_and(|v| v == "1"));
+    *REBLUR_ALL
 }
 
 /// How far a change spreads through a blur with `options`, in buffer pixels: dual kawase
@@ -684,6 +714,17 @@ mod stale_tests {
         let mut stale = Stale::default();
         stale.add(&[rect(0, 200, 100, 10)]);
         assert!(stale.still_shows(area(0., 0., 2880., 42.), OPTIONS));
+    }
+
+    #[test]
+    fn a_reblur_redoes_the_changes_widened_by_the_reach() {
+        let mut stale = Stale::default();
+        assert_eq!(stale.region(OPTIONS), None);
+        stale.add(&[rect(100, 100, 10, 10), rect(300, 100, 10, 10)]);
+        // 4 passes at offset 2: 66 px each way
+        let region = stale.region(OPTIONS).unwrap();
+        assert_eq!(region.loc, (34, 34).into());
+        assert_eq!(region.size, (342, 142).into());
     }
 
     #[test]

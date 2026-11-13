@@ -267,3 +267,7 @@ comment. The branch before that is `ocbk-pre-tidy` (`16ab6bdb`).
 | `66ce460d` | [power](display/power.md) | a re-blur after a nearby change drops the old blur first (it failed the unique-reference check and left the stale blur) |
 | `d10afa30` | [power](display/power.md) | an animated cursor redraws only the output it shows on, and not while hidden |
 | `2657cf7b` | [HDR](display/hdr.md#automatic-hdr-hdr-auto) | `hdr-auto` decides from the output's own frame, not a screencast's or screenshot's |
+| `e75026c9` | [power](display/power.md) | commits that can't be seen (windows on hidden workspaces, content-only layer commits of hidden layers) don't redraw or relayout |
+| `7d641a9a` | [power](display/power.md) | no element work with the monitors off; a lid closed with no external display turns the monitors off |
+| `0bf3eaa1` | [power](display/power.md) | the activation-token sweep and the 1 s fallback timer armed only when needed |
+| `a7fda44f` | [background apps](ipc/background-apps.md) | Introspect's `GetRunningApplications` and `RunningApplicationsChanged`, with the Flatpak app id from the security context |

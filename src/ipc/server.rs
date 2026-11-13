@@ -865,7 +865,7 @@ impl State {
         }
 
         let event = Event::ViewOffsetChanged {
-            output: v.output,
+            output: v.output.to_owned(),
             view_pos: v.view_pos,
             active_column_idx: v.active_column_idx,
         };
@@ -895,7 +895,7 @@ impl State {
         }
 
         let event = Event::WorkspaceSwitchProgress {
-            output: v.output,
+            output: v.output.to_owned(),
             workspace_idx: v.workspace_idx,
             active_workspace_idx: v.active_workspace_idx,
         };
@@ -911,23 +911,30 @@ impl State {
         let mut state = server.event_stream_state.borrow_mut();
         let state = &mut state.desktop_obscured;
 
-        // Forget unplugged outputs, so new clients aren't told about them and one that comes
-        // back under the same name gets an event.
-        let names: HashSet<String> = self.niri.global_space.outputs().map(|o| o.name()).collect();
-        state.outputs.retain(|name, _| names.contains(name));
-
         let mut events = Vec::new();
+        let mut count = 0;
         for output in self.niri.global_space.outputs() {
+            count += 1;
             let obscured = self.niri.layout.is_desktop_obscured(output);
-            let name = output.name();
-            if state.outputs.get(&name) == Some(&obscured) {
+            // the connector name without a copy: this runs every loop iteration (fork)
+            let name = &output.user_data().get::<OutputName>().unwrap().connector;
+            if state.outputs.get(name) == Some(&obscured) {
                 continue;
             }
 
             events.push(Event::DesktopObscured {
-                output: name,
+                output: name.clone(),
                 obscured,
             });
+        }
+
+        // Forget unplugged outputs, so new clients aren't told about them and one that comes
+        // back under the same name gets an event. Only when there are more than shown: the
+        // events above add the new ones.
+        if state.outputs.len() + events.len() > count {
+            let names: HashSet<String> =
+                self.niri.global_space.outputs().map(|o| o.name()).collect();
+            state.outputs.retain(|name, _| names.contains(name));
         }
 
         for event in events {

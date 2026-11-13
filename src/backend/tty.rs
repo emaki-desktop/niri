@@ -391,6 +391,8 @@ struct Surface {
     /// Frame name for the VBlank frame.
     vblank_frame_name: tracy_client::FrameName,
     /// Plot name for the time since presentation plot.
+    // only plotted with Tracy (fork)
+    #[cfg_attr(not(feature = "profile-with-tracy"), allow(dead_code))]
     time_since_presentation_plot_name: tracy_client::PlotName,
     /// Plot name for the presentation misprediction plot.
     presentation_misprediction_plot_name: tracy_client::PlotName,
@@ -1698,6 +1700,9 @@ impl Tty {
             presentation_time
         };
 
+        // Only built for Tracy: without it these are a string formatted per vblank for nothing
+        // (fork).
+        #[cfg(feature = "profile-with-tracy")]
         let message = if presentation_time.is_zero() {
             format!("vblank on {name}, presentation time unknown")
         } else if presentation_time > now {
@@ -1715,6 +1720,7 @@ impl Tty {
             );
             format!("vblank on {name}, presentation was {diff:?} ago")
         };
+        #[cfg(feature = "profile-with-tracy")]
         tracy_client::Client::running()
             .unwrap()
             .message(&message, 0);

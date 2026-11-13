@@ -5075,11 +5075,12 @@ impl<W: LayoutElement> Layout<W> {
     /// Scrolling and workspace-switch values of the focused output's active workspace.
     ///
     /// Returns `None` when there is no active monitor (no outputs connected).
-    pub fn active_view_state(&self) -> Option<ActiveViewState> {
+    pub fn active_view_state(&self) -> Option<ActiveViewState<'_>> {
         let mon = self.active_monitor_ref()?;
         let ws = mon.active_workspace_ref();
         Some(ActiveViewState {
-            output: mon.output_name().clone(),
+            // borrowed: read every loop iteration, copied only into an event (fork)
+            output: mon.output_name(),
             view_pos: ws.view_pos(),
             active_column_idx: ws.active_column_idx(),
             workspace_idx: mon.workspace_render_idx(),
@@ -5091,9 +5092,9 @@ impl<W: LayoutElement> Layout<W> {
 /// Live scrolling and workspace-switch values of the focused output, read for the IPC event
 /// stream (horizontal view offset and vertical workspace switch progress).
 #[derive(Debug, Clone)]
-pub struct ActiveViewState {
+pub struct ActiveViewState<'a> {
     /// Name of the focused output.
-    pub output: String,
+    pub output: &'a str,
     /// Horizontal scroll position of the active workspace, in logical pixels.
     pub view_pos: f64,
     /// Index of the active column.
